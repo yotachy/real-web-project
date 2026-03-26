@@ -65,15 +65,21 @@
   .pyeong-section{padding:10px 0;border-bottom:1px solid var(--border);}
   .pyeong-section:last-child{border-bottom:none;padding-bottom:0;}
   .pyeong-label{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px;}
-  .latest-label{font-size:10px;color:var(--muted2);font-weight:500;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;}
-  .latest-price{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;letter-spacing:-0.5px;}
-  .latest-meta{font-size:11px;color:var(--muted);margin-top:3px;}
-  .change-row{display:flex;align-items:center;gap:6px;margin-top:6px;}
-  .change-badge{display:inline-flex;align-items:center;gap:3px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;}
-  .change-badge.up{background:rgba(52,211,153,0.12);color:#34d399;}
-  .change-badge.down{background:rgba(248,113,113,0.12);color:#f87171;}
-  .change-badge.neu{background:rgba(113,128,150,0.12);color:#718096;}
-  .change-meta{font-size:10px;color:var(--muted);}
+  /* 카드 가격 영역 */
+  .price-block{padding:4px 0 8px;}
+  .price-main{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:800;letter-spacing:-1px;line-height:1.1;color:var(--text);}
+  .price-sub-row{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .price-prev{font-size:12px;color:var(--muted2);}
+  .price-prev span{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  .chg-badge{display:inline-flex;align-items:center;gap:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;}
+  .chg-badge.up{background:rgba(52,211,153,0.15);color:#34d399;}
+  .chg-badge.down{background:rgba(248,113,113,0.15);color:#f87171;}
+  .chg-badge.neu{background:rgba(113,128,150,0.12);color:#718096;}
+  .price-meta{font-size:10px;color:var(--muted);margin-top:4px;}
+  .range-row{display:flex;gap:4px;margin-top:8px;}
+  .range-pill{flex:1;background:var(--card2);border-radius:7px;padding:5px 8px;text-align:center;}
+  .range-pill-label{font-size:9px;color:var(--muted);margin-bottom:2px;}
+  .range-pill-val{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;}
   .stat-box{background:var(--card2);border-radius:8px;padding:8px 12px;margin-top:10px;display:flex;justify-content:space-between;}
   .stat-item{text-align:center;}
   .stat-label{font-size:10px;color:var(--muted);margin-bottom:3px;}
@@ -540,21 +546,31 @@ function renderCard(apt,delay=0){
       const periodLabel = currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월';
       const chgVal = stats.change;
       const chgCls = chgVal===null?'neu':chgVal>0?'up':'down';
-      // 증가=초록(up), 감소=빨강(down) — 부동산은 올라도 내려도 중립 표기
       const chgIcon = chgVal===null?'─':chgVal>0?'▲':'▼';
-      const chgStr = chgVal===null?'변동없음':`${chgIcon} ${Math.abs(chgVal).toFixed(1)}%`;
+      const chgStr = chgVal===null?'-':`${chgIcon} ${Math.abs(chgVal).toFixed(1)}%`;
+      const prevTx = txs[1];
+      const prevPriceStr = prevTx ? formatPrice(prevTx.price) : null;
+      const allPrices = txs.map(t=>t.price);
+      const minP = Math.min(...allPrices);
+      const maxP = Math.max(...allPrices);
       return `<div class="pyeong-section">
         <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">${periodLabel} ${stats.count}건</span></div>
-        <div class="latest-label">최근 실거래가</div>
-        <div class="latest-price">${formatPrice(stats.latest.price)}</div>
-        <div class="latest-meta">${pyeongStr(stats.latest.area)} · ${stats.latest.floor}층 · ${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</div>
-        <div class="change-row">
-          <span class="change-badge ${chgCls}">${chgStr}</span>
-          <span class="change-meta">직전 거래 대비</span>
+        <div class="price-block">
+          <div class="price-main">${formatPrice(stats.latest.price)}</div>
+          <div class="price-sub-row">
+            ${prevPriceStr ? `<span class="price-prev">직전 <span>${prevPriceStr}</span></span><span class="chg-badge ${chgCls}">${chgStr}</span>` : `<span style="font-size:11px;color:var(--muted)">첫 거래</span>`}
+          </div>
+          <div class="price-meta">${pyeongStr(stats.latest.area)} · ${stats.latest.floor}층 · ${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</div>
         </div>
-        <div class="stat-box">
-          <div class="stat-item"><div class="stat-label">${periodLabel} 최저가</div><div class="stat-val" style="color:#34d399">${formatPrice(stats.minPrice)}</div></div>
-          <div class="stat-item"><div class="stat-label">${periodLabel} 최고가</div><div class="stat-val" style="color:#f87171">${formatPrice(Math.max(...(txMap[p]||[]).map(t=>t.price)))}</div></div>
+        <div class="range-row">
+          <div class="range-pill">
+            <div class="range-pill-label">↓ ${periodLabel} 최저</div>
+            <div class="range-pill-val" style="color:#34d399">${formatPrice(minP)}</div>
+          </div>
+          <div class="range-pill">
+            <div class="range-pill-label">↑ ${periodLabel} 최고</div>
+            <div class="range-pill-val" style="color:#f87171">${formatPrice(maxP)}</div>
+          </div>
         </div></div>`;
     }).join('');
   }
