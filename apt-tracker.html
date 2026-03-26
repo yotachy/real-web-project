@@ -661,7 +661,7 @@ function selectCard(aptId) {
 
   // 카드 하이라이트 초기화 후 재적용
   document.querySelectorAll('.apt-card').forEach(c => {
-    c.classList.remove('selected-a','selected-b');
+    c.classList.remove('selected-a','selected-b','selected-c');
   });
   selectedAptIds.forEach((id, i) => {
     const card = document.getElementById('card-' + id);
