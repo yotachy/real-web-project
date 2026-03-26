@@ -153,6 +153,22 @@
   .period-btn{background:transparent;border:1.5px solid var(--border);color:var(--muted2);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
   .period-btn:hover{border-color:var(--border2);color:var(--text);}
   .period-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+  /* 거래 목록 */
+  .tx-list-wrap{border-top:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column;max-height:280px;}
+  .tx-list-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 8px;}
+  .tx-list-title{font-size:12px;font-weight:700;color:var(--muted2);}
+  .tx-list-count{font-size:11px;color:var(--muted);}
+  .tx-list-body{overflow-y:auto;flex:1;}
+  .tx-list-body::-webkit-scrollbar{width:4px;}
+  .tx-list-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+  .tx-item{display:grid;grid-template-columns:3px 1fr auto;gap:0 12px;align-items:center;padding:8px 20px;border-bottom:1px solid var(--border);transition:background .1s;}
+  .tx-item:last-child{border-bottom:none;}
+  .tx-item:hover{background:#0b1018;}
+  .tx-item-bar{width:3px;height:32px;border-radius:2px;flex-shrink:0;}
+  .tx-item-info{min-width:0;}
+  .tx-item-name{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tx-item-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+  .tx-item-price{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;text-align:right;white-space:nowrap;}
   @media(max-width:480px){#dashboard-screen{padding:16px 12px 80px;}.header-title{font-size:17px;}.period-btn{padding:6px 10px;font-size:12px;}}
 </style>
 </head>
@@ -191,6 +207,13 @@
         <div class="chart-body">
           <div class="chart-svg-wrap" id="chart-svg-wrap"></div>
           <div class="chart-legend-bar" id="chart-legend-bar"></div>
+        </div>
+        <div class="tx-list-wrap" id="tx-list-wrap">
+          <div class="tx-list-header">
+            <span class="tx-list-title">실거래 내역</span>
+            <span class="tx-list-count" id="tx-list-count"></span>
+          </div>
+          <div class="tx-list-body" id="tx-list-body"></div>
         </div>
       </div>
     </div>
@@ -728,6 +751,10 @@ function selectCard(aptId) {
   if (!selectedAptIds.length) {
     document.getElementById('chart-empty').style.display = 'flex';
     document.getElementById('chart-content').style.display = 'none';
+    const tlb = document.getElementById('tx-list-body');
+    if (tlb) tlb.innerHTML = '';
+    const tlc = document.getElementById('tx-list-count');
+    if (tlc) tlc.textContent = '';
     return;
   }
 
@@ -942,6 +969,46 @@ function renderChart(pyeong) {
         <span>${s.apt.aptName}</span>
         ${!s.txs.length ? '<span style="font-size:10px;color:var(--muted);font-weight:400">(해당 평형 없음)</span>' : ''}
       </div>`).join('');
+
+  // 거래 목록 렌더
+  renderTxList(series);
+}
+
+function renderTxList(series) {
+  const body = document.getElementById('tx-list-body');
+  const countEl = document.getElementById('tx-list-count');
+  if (!body) return;
+
+  // 전체 거래 합산 (아파트 정보 포함), 날짜 내림차순
+  const allItems = series.flatMap(s =>
+    s.txs.map(tx => ({ tx, color: s.color, apt: s.apt }))
+  ).sort((a, b) =>
+    `${b.tx.year}${b.tx.month}${b.tx.day}`.localeCompare(`${a.tx.year}${a.tx.month}${a.tx.day}`)
+  );
+
+  const isMulti = series.filter(s => s.txs.length > 0).length > 1;
+  countEl.textContent = `총 ${allItems.length}건`;
+
+  if (!allItems.length) {
+    body.innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--muted)">거래 내역 없음</div>';
+    return;
+  }
+
+  body.innerHTML = allItems.map(({ tx, color, apt }) => `
+    <div class="tx-item">
+      <div class="tx-item-bar" style="background:${isMulti ? color.line : 'transparent'}"></div>
+      <div class="tx-item-info">
+        <div class="tx-item-name" style="color:${isMulti ? color.line : 'var(--text)'}">
+          ${isMulti ? apt.aptName : `${tx.floor}층 · ${(tx.area/3.3058).toFixed(0)}평`}
+        </div>
+        <div class="tx-item-meta">
+          ${isMulti ? `${tx.floor}층 · ${(tx.area/3.3058).toFixed(0)}평 · ` : ''}${tx.year}.${tx.month}.${tx.day}
+        </div>
+      </div>
+      <div class="tx-item-price" style="color:${isMulti ? color.line : 'var(--text)'}">
+        ${formatPrice(tx.price)}
+      </div>
+    </div>`).join('');
 }
 
 function showChartTooltip(e, text) {
