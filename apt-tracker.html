@@ -38,7 +38,16 @@
   .chart-stat-label{font-size:10px;color:var(--muted);margin-bottom:4px;}
   .chart-stat-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;}
   /* 카드 선택 상태 */
-  .apt-card.selected{border-color:var(--accent) !important;box-shadow:0 0 0 1px var(--accent);}
+  .apt-card.selected-a{border-color:#e8b84b !important;box-shadow:0 0 0 1px #e8b84b;}
+  .apt-card.selected-b{border-color:#60a5fa !important;box-shadow:0 0 0 1px #60a5fa;}
+  .apt-card.selected-a .card-apt-name::before{content:'① ';color:#e8b84b;}
+  .apt-card.selected-b .card-apt-name::before{content:'② ';color:#60a5fa;}
+  .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
+  .chart-stats-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+  .chart-stat-group{background:var(--card2);border-radius:10px;padding:12px 14px;}
+  .chart-stat-group-title{font-size:11px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
+  .chart-stat-row2{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
   @media(max-width:900px){.main-layout{grid-template-columns:1fr;}.chart-panel{position:static;min-height:360px;}.card-list{max-height:none;}}
   .apt-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s;animation:fadeUp .35s ease both;}
@@ -169,6 +178,7 @@
           <div class="chart-apt-sub" id="chart-apt-sub">-</div>
         </div>
         <div class="chart-tabs" id="chart-tabs"></div>
+        <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 비교할 수 있어요</div>
         <div class="chart-body">
           <div class="chart-svg-wrap" id="chart-svg-wrap"></div>
           <div class="chart-stats-row" id="chart-stats-row"></div>
@@ -377,7 +387,7 @@ async function refreshAll(){
   document.getElementById('last-updated-label').textContent=`마지막 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
   renderGrid();isRefreshing=false;btn.disabled=false;btn.innerHTML='🔄 새로고침';
   toast('✅ 조회 완료!');
-  if(selectedAptId) selectCard(selectedAptId);
+  if(selectedAptIds.length) renderChart(chartActivePyeong);
 }
 
 function renderGrid(){
@@ -625,147 +635,261 @@ async function addApartment(){
   setTimeout(()=>selectCard(apt.id),100);
 }
 // ─── 선택된 카드 & 차트 ──────────────────────────────────────────
-let selectedAptId = null;
+// ─── 비교 차트 ──────────────────────────────────────────────────
+const CHART_COLORS = [
+  {line:'#e8b84b', area:'rgba(232,184,75,0.15)', cls:'selected-a'},
+  {line:'#60a5fa', area:'rgba(96,165,250,0.15)',  cls:'selected-b'},
+];
+let selectedAptIds = []; // 최대 2개
 let chartActivePyeong = null;
 
 function selectCard(aptId) {
-  // 선택 표시
-  document.querySelectorAll('.apt-card').forEach(c => c.classList.remove('selected'));
-  const card = document.getElementById('card-' + aptId);
-  if (card) card.classList.add('selected');
+  const idx = selectedAptIds.indexOf(aptId);
+  if (idx !== -1) {
+    // 이미 선택된 카드 → 해제
+    selectedAptIds.splice(idx, 1);
+  } else {
+    if (selectedAptIds.length >= 2) {
+      // 2개 이미 선택 → 첫번째 교체
+      selectedAptIds.shift();
+    }
+    selectedAptIds.push(aptId);
+  }
 
-  selectedAptId = aptId;
-  const apt = apartments.find(a => a.id === aptId);
-  if (!apt) return;
+  // 카드 하이라이트 초기화 후 재적용
+  document.querySelectorAll('.apt-card').forEach(c => {
+    c.classList.remove('selected-a','selected-b');
+  });
+  selectedAptIds.forEach((id, i) => {
+    const card = document.getElementById('card-' + id);
+    if (card) card.classList.add(CHART_COLORS[i].cls);
+  });
 
-  // 패널 전환
+  // 패널 업데이트
+  if (!selectedAptIds.length) {
+    document.getElementById('chart-empty').style.display = 'flex';
+    document.getElementById('chart-content').style.display = 'none';
+    return;
+  }
+
   document.getElementById('chart-empty').style.display = 'none';
-  const cc = document.getElementById('chart-content');
-  cc.style.display = 'flex';
+  document.getElementById('chart-content').style.display = 'flex';
 
-  document.getElementById('chart-apt-name').textContent = apt.aptName;
-  document.getElementById('chart-apt-sub').textContent = apt.regionName + ' · 최근 3개월 실거래';
+  // 헤더 텍스트
+  const names = selectedAptIds.map(id => apartments.find(a=>a.id===id)?.aptName || '').filter(Boolean);
+  document.getElementById('chart-apt-name').textContent = names.join(' vs ');
+  document.getElementById('chart-apt-sub').textContent = '최근 3개월 실거래 비교';
 
-  // 탭 렌더
-  chartActivePyeong = apt.pyeongs[0];
-  document.getElementById('chart-tabs').innerHTML = apt.pyeongs.map(p =>
+  // 비교 힌트
+  const hint = document.getElementById('compare-hint');
+  hint.style.display = selectedAptIds.length === 1 ? 'block' : 'none';
+
+  // 탭: 선택된 아파트들의 모든 평형 합집합
+  const allPyeongs = [...new Set(selectedAptIds.flatMap(id => {
+    const apt = apartments.find(a=>a.id===id);
+    return apt ? apt.pyeongs : [];
+  }))].sort();
+
+  if (!chartActivePyeong || !allPyeongs.includes(chartActivePyeong)) {
+    chartActivePyeong = allPyeongs[0];
+  }
+
+  document.getElementById('chart-tabs').innerHTML = allPyeongs.map(p =>
     `<button class="chart-tab${p === chartActivePyeong ? ' active' : ''}"
       onclick="switchChartTab('${p}',this)">${PYEONG_DEFS[p].label}</button>`
   ).join('');
 
-  renderChart(aptId, chartActivePyeong);
+  renderChart(chartActivePyeong);
 }
 
 function switchChartTab(p, btn) {
   document.querySelectorAll('.chart-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   chartActivePyeong = p;
-  renderChart(selectedAptId, p);
+  renderChart(p);
 }
 
-function renderChart(aptId, pyeong) {
-  const txMap = transactions[aptId] || {};
-  const txs = (txMap[pyeong] || []).slice().reverse(); // 오래된 것 → 최신 순
+function renderChart(pyeong) {
   const wrap = document.getElementById('chart-svg-wrap');
   const statsRow = document.getElementById('chart-stats-row');
+  if (!selectedAptIds.length) return;
 
-  if (!txs.length) {
-    wrap.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">거래 내역 없음</div>`;
+  // 각 아파트별 데이터 준비 (날짜순 정렬)
+  const series = selectedAptIds.map((id, si) => {
+    const apt = apartments.find(a=>a.id===id);
+    const txMap = transactions[id] || {};
+    const txs = apt?.pyeongs.includes(pyeong)
+      ? (txMap[pyeong] || []).slice().reverse()
+      : [];
+    return { id, apt, txs, color: CHART_COLORS[si] };
+  });
+
+  const allTxs = series.flatMap(s => s.txs);
+  if (!allTxs.length) {
+    wrap.innerHTML = `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">선택한 평형의 거래 내역 없음</div>`;
     statsRow.innerHTML = '';
     return;
   }
 
-  // 통계
-  const prices = txs.map(t => t.price);
-  const maxP = Math.max(...prices), minP = Math.min(...prices);
-  const avgP = Math.round(prices.reduce((a,b)=>a+b,0)/prices.length);
-  const latest = txs[txs.length-1];
-  const prev = txs.length > 1 ? txs[txs.length-2] : null;
-  const change = prev ? ((latest.price - prev.price)/prev.price*100) : null;
-  const changeColor = change === null ? '#718096' : change > 0 ? '#f87171' : '#34d399';
-  const changeStr = change === null ? '-' : `${change>0?'▲':'▼'} ${Math.abs(change).toFixed(1)}%`;
+  // 전체 날짜 범위 계산 (3개월 고정)
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth()-2, 1);
+  const endDate = now;
+  const totalDays = Math.max((endDate - startDate) / 86400000, 1);
 
-  statsRow.innerHTML = `
-    <div class="chart-stat">
-      <div class="chart-stat-label">최근 실거래</div>
-      <div class="chart-stat-val">${formatPrice(latest.price)}</div>
-    </div>
-    <div class="chart-stat">
-      <div class="chart-stat-label">3개월 최저</div>
-      <div class="chart-stat-val up-color">${formatPrice(minP)}</div>
-    </div>
-    <div class="chart-stat">
-      <div class="chart-stat-label">직전 대비</div>
-      <div class="chart-stat-val" style="color:${changeColor}">${changeStr}</div>
-    </div>`;
+  function dateToX(tx, cw, padL) {
+    const d = new Date(+tx.year, +tx.month-1, +tx.day);
+    const ratio = Math.max(0, Math.min(1, (d - startDate) / (endDate - startDate)));
+    return padL + ratio * cw;
+  }
 
-  // SVG 차트
-  const W = wrap.clientWidth || 480, H = 240;
-  const pad = {t:20, r:20, b:40, l:72};
+  // 전체 가격 범위
+  const allPrices = allTxs.map(t=>t.price);
+  const globalMax = Math.max(...allPrices);
+  const globalMin = Math.min(...allPrices);
+  const priceRange = globalMax - globalMin || globalMax * 0.1 || 1;
+  // 여백 10%
+  const yMin = globalMin - priceRange * 0.1;
+  const yMax = globalMax + priceRange * 0.1;
+  const yRange = yMax - yMin;
+
+  const W = wrap.clientWidth || 520, H = 260;
+  const pad = {t:24, r:20, b:44, l:78};
   const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
-  const priceRange = maxP - minP || 1;
-  const xStep = txs.length > 1 ? cw / (txs.length - 1) : cw / 2;
 
-  const pts = txs.map((tx, i) => ({
-    x: pad.l + (txs.length > 1 ? i * xStep : cw/2),
-    y: pad.t + ch - ((tx.price - minP) / priceRange * ch),
-    tx,
-  }));
+  function priceToY(price) {
+    return pad.t + ch - ((price - yMin) / yRange * ch);
+  }
 
-  // 그리드 라인 (4개)
-  const gridLines = [0, 0.33, 0.66, 1].map(r => {
-    const price = minP + priceRange * r;
-    const y = pad.t + ch - (r * ch);
+  // 그리드 & Y축
+  const gridCount = 5;
+  const gridLines = Array.from({length:gridCount}, (_,i) => {
+    const r = i/(gridCount-1);
+    const price = yMin + yRange * r;
+    const y = pad.t + ch - r*ch;
     return `
-      <line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="#1a2235" stroke-width="1"/>
-      <text x="${pad.l-6}" y="${y+4}" text-anchor="end" fill="#4a5568" font-size="10">${formatPrice(Math.round(price))}</text>`;
+      <line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${W-pad.r}" y2="${y.toFixed(1)}" stroke="#1a2235" stroke-width="1" stroke-dasharray="${i===0?'none':'4,3'}"/>
+      <text x="${pad.l-6}" y="${(y+4).toFixed(1)}" text-anchor="end" fill="#4a5568" font-size="10" font-family="IBM Plex Mono">${formatPrice(Math.round(price))}</text>`;
   }).join('');
 
-  // X축 날짜 (최대 6개만 표시)
-  const step = Math.max(1, Math.floor(txs.length / 6));
-  const xLabels = txs.map((tx, i) => {
-    if (i % step !== 0 && i !== txs.length-1) return '';
-    return `<text x="${pts[i].x}" y="${H-8}" text-anchor="middle" fill="#4a5568" font-size="10">${tx.month}/${tx.day}</text>`;
-  }).join('');
+  // X축: 월 기준으로 눈금
+  const xAxisLabels = [];
+  for (let m=0; m<=2; m++) {
+    const d = new Date(now.getFullYear(), now.getMonth()-2+m, 1);
+    const ratio = Math.max(0, Math.min(1, (d - startDate)/(endDate-startDate)));
+    const x = pad.l + ratio * cw;
+    xAxisLabels.push(`<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" fill="#4a5568" font-size="10">${d.getMonth()+1}월</text>`);
+    xAxisLabels.push(`<line x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}" stroke="#1a2235" stroke-width="1" stroke-dasharray="4,3"/>`);
+  }
 
-  // 라인 path
-  const linePath = pts.map((p,i) => `${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  // 각 시리즈 SVG 생성
+  const defs = [];
+  const paths = [];
+  const dots = [];
 
-  // 영역 채우기
-  const areaPath = `${linePath} L${pts[pts.length-1].x.toFixed(1)},${(pad.t+ch).toFixed(1)} L${pts[0].x.toFixed(1)},${(pad.t+ch).toFixed(1)} Z`;
+  series.forEach((s, si) => {
+    if (!s.txs.length) return;
+    const c = s.color;
+    const gradId = `grad${si}`;
+    defs.push(`
+      <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${c.line}" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="${c.line}" stop-opacity="0"/>
+      </linearGradient>`);
 
-  // 툴팁 포인트
-  const circles = pts.map((p, i) => `
-    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#e8b84b" stroke="#070b14" stroke-width="2"
-      class="chart-dot"
-      onmouseenter="showChartTooltip(event,'${formatPrice(p.tx.price)} · ${p.tx.month}/${p.tx.day} · ${p.tx.floor}층')"
-      onmouseleave="hideChartTooltip()"/>
-  `).join('');
+    const pts = s.txs.map(tx => ({
+      x: dateToX(tx, cw, pad.l),
+      y: priceToY(tx.price),
+      tx,
+    }));
+
+    const linePath = pts.map((p,i)=>`${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPath = pts.length > 1
+      ? `${linePath} L${pts[pts.length-1].x.toFixed(1)},${(pad.t+ch).toFixed(1)} L${pts[0].x.toFixed(1)},${(pad.t+ch).toFixed(1)} Z`
+      : '';
+
+    if (areaPath) paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
+    paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
+
+    pts.forEach(p => {
+      const tip = `${s.apt?.aptName} · ${formatPrice(p.tx.price)} · ${p.tx.month}/${p.tx.day} · ${p.tx.floor}층`;
+      dots.push(`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${pts.length===1?6:4}" fill="${c.line}" stroke="#070b14" stroke-width="2"
+        onmouseenter="showChartTooltip(event,${JSON.stringify(tip)})"
+        onmouseleave="hideChartTooltip()"/>`);
+    });
+  });
 
   wrap.innerHTML = `
-    <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
-      <defs>
-        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#e8b84b" stop-opacity="0.25"/>
-          <stop offset="100%" stop-color="#e8b84b" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
+    <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block">
+      <defs>${defs.join('')}</defs>
       ${gridLines}
-      <path d="${areaPath}" fill="url(#areaGrad)"/>
-      <path d="${linePath}" fill="none" stroke="#e8b84b" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      ${circles}
-      ${xLabels}
-      <div id="chart-tooltip" style="position:absolute;display:none"></div>
+      ${xAxisLabels.join('')}
+      <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
+      <line x1="${pad.l}" y1="${(pad.t+ch).toFixed(1)}" x2="${(W-pad.r).toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
+      ${paths.join('')}
+      ${dots.join('')}
     </svg>
-    <div id="chart-tooltip" style="position:fixed;display:none;background:#1a2235;border:1px solid #2a3550;border-radius:8px;padding:7px 12px;font-size:12px;color:#e2e8f0;pointer-events:none;z-index:999;white-space:nowrap;font-family:'IBM Plex Mono',monospace;"></div>`;
+    <div id="chart-tooltip" style="position:fixed;display:none;background:#1a2235;border:1px solid #2a3550;border-radius:8px;padding:7px 12px;font-size:12px;color:#e2e8f0;pointer-events:none;z-index:999;white-space:nowrap;font-family:'IBM Plex Mono',monospace;box-shadow:0 4px 16px rgba(0,0,0,.5)"></div>`;
+
+  // 통계 렌더
+  const isCompare = selectedAptIds.length > 1;
+  if (isCompare) {
+    statsRow.className = 'chart-stats-compare';
+    statsRow.innerHTML = series.map((s, si) => {
+      if (!s.txs.length) return `
+        <div class="chart-stat-group">
+          <div class="chart-stat-group-title">
+            <span class="color-dot" style="background:${s.color.line}"></span>
+            ${s.apt?.aptName}
+          </div>
+          <div style="font-size:12px;color:var(--muted)">해당 평형 거래 없음</div>
+        </div>`;
+      const prices = s.txs.map(t=>t.price);
+      const latest = s.txs[s.txs.length-1];
+      const prev2 = s.txs.length>1 ? s.txs[s.txs.length-2] : null;
+      const chg = prev2 ? ((latest.price-prev2.price)/prev2.price*100) : null;
+      const cc = chg===null?'#718096':chg>0?'#f87171':'#34d399';
+      return `
+        <div class="chart-stat-group">
+          <div class="chart-stat-group-title">
+            <span class="color-dot" style="background:${s.color.line}"></span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.apt?.aptName}</span>
+          </div>
+          <div class="chart-stat-row2">
+            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">최근 실거래</div>
+              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">${formatPrice(latest.price)}</div></div>
+            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">3개월 최저</div>
+              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#34d399">${formatPrice(Math.min(...prices))}</div></div>
+            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">거래 건수</div>
+              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#60a5fa">${s.txs.length}건</div></div>
+            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">직전 대비</div>
+              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:${cc}">${chg===null?'-':(chg>0?'▲':'▼')+Math.abs(chg).toFixed(1)+'%'}</div></div>
+          </div>
+        </div>`;
+    }).join('');
+  } else {
+    statsRow.className = 'chart-stats-row';
+    const s = series[0];
+    if (!s.txs.length) { statsRow.innerHTML=''; return; }
+    const prices = s.txs.map(t=>t.price);
+    const latest = s.txs[s.txs.length-1];
+    const prev2 = s.txs.length>1?s.txs[s.txs.length-2]:null;
+    const chg = prev2?((latest.price-prev2.price)/prev2.price*100):null;
+    const cc = chg===null?'#718096':chg>0?'#f87171':'#34d399';
+    statsRow.innerHTML = `
+      <div class="chart-stat"><div class="chart-stat-label">최근 실거래</div><div class="chart-stat-val">${formatPrice(latest.price)}</div></div>
+      <div class="chart-stat"><div class="chart-stat-label">3개월 최저</div><div class="chart-stat-val up-color">${formatPrice(Math.min(...prices))}</div></div>
+      <div class="chart-stat"><div class="chart-stat-label">직전 대비</div><div class="chart-stat-val" style="color:${cc}">${chg===null?'-':(chg>0?'▲':'▼')+Math.abs(chg).toFixed(1)+'%'}</div></div>`;
+  }
 }
 
 function showChartTooltip(e, text) {
   const tt = document.getElementById('chart-tooltip');
+  if(!tt) return;
   tt.textContent = text;
   tt.style.display = 'block';
-  tt.style.left = (e.clientX + 12) + 'px';
-  tt.style.top = (e.clientY - 32) + 'px';
+  tt.style.left = (e.clientX + 14) + 'px';
+  tt.style.top = (e.clientY - 36) + 'px';
 }
 function hideChartTooltip() {
   const tt = document.getElementById('chart-tooltip');
@@ -774,10 +898,19 @@ function hideChartTooltip() {
 
 function removeApt(aptId) {
   apartments=apartments.filter(a=>a.id!==aptId);delete transactions[aptId];delete newCounts[aptId];
-  if(selectedAptId===aptId){
-    selectedAptId=null;
-    document.getElementById('chart-empty').style.display='flex';
-    document.getElementById('chart-content').style.display='none';
+  if(selectedAptIds.includes(aptId)){
+    selectedAptIds = selectedAptIds.filter(id=>id!==aptId);
+    document.querySelectorAll('.apt-card').forEach(c=>c.classList.remove('selected-a','selected-b'));
+    selectedAptIds.forEach((id,i)=>{
+      const card=document.getElementById('card-'+id);
+      if(card) card.classList.add(CHART_COLORS[i].cls);
+    });
+    if(!selectedAptIds.length){
+      document.getElementById('chart-empty').style.display='flex';
+      document.getElementById('chart-content').style.display='none';
+    } else {
+      renderChart(chartActivePyeong);
+    }
   }
   saveApts();renderGrid();
 }
