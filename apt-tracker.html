@@ -340,11 +340,35 @@ function toast(msg,d=2500){
   setTimeout(()=>el.classList.remove('show'),d);
 }
 
-async function fetchMonthData(lawdCd,dealYmd){
-  const res=await fetch(`/proxy?LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}`);
-  if(!res.ok) throw new Error(`서버 오류 ${res.status}`);
-  return parseXML(await res.text());
+// ── 배치 fetch: 서버에서 여러 달 병렬 처리 ─────────────────────
+async function fetchBatch(lawdCd, ymds) {
+  const url = `/batch?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+  const map = await res.json(); // { "202501": "<xml>...", ... }
+  const result = {};
+  for (const [ymd, xml] of Object.entries(map)) {
+    result[ymd] = parseXML(xml);
+  }
+  return result; // { ymd → [tx, ...] }
 }
+
+async function fetchApt(apt) {
+  const ymds = getLastNMonths(currentPeriod);
+  const batchResult = await fetchBatch(apt.lawdCd, ymds);
+  const all = Object.values(batchResult).flat();
+
+  const matched = all.filter(tx => tx.aptName.includes(apt.aptName));
+  const result = {};
+  for (const p of apt.pyeongs) {
+    const def = PYEONG_DEFS[p];
+    result[p] = matched
+      .filter(tx => tx.area >= def.minM2 && tx.area < def.maxM2)
+      .sort((a,b) => `${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
+  }
+  return result;
+}
+
 function parseXML(xmlStr){
   const doc=new DOMParser().parseFromString(xmlStr,'text/xml');
   const code=doc.querySelector('resultCode')?.textContent?.trim();
@@ -361,18 +385,7 @@ function parseXML(xmlStr){
       cancelled:g('cdealType').trim(),id:`${g('aptNm')}_${yr}${mo}${dy}_F${g('floor')}_${g('excluUseAr')}`};
   }).filter(t=>t.cancelled!=='해제'&&t.price>0&&t.aptName);
 }
-async function fetchApt(apt){
-  const months=getLastNMonths(currentPeriod);const all=[];
-  for(const ym of months){const txs=await fetchMonthData(apt.lawdCd,ym);all.push(...txs);}
-  const matched=all.filter(tx=>tx.aptName.includes(apt.aptName));
-  const result={};
-  for(const p of apt.pyeongs){
-    const def=PYEONG_DEFS[p];
-    result[p]=matched.filter(tx=>tx.area>=def.minM2&&tx.area<def.maxM2)
-      .sort((a,b)=>`${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
-  }
-  return result;
-}
+
 function calcStats(txs){
   if(!txs||!txs.length) return null;
   const latest=txs[0];
@@ -387,7 +400,8 @@ async function refreshAll(){
   isRefreshing=true;
   const btn=document.getElementById('refresh-btn');
   btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> 조회중...';
-  for(const apt of apartments){
+  // 모든 아파트 병렬 조회
+  await Promise.all(apartments.map(async apt => {
     try{
       const txMap=await fetchApt(apt);
       transactions[apt.id]=txMap;
@@ -396,7 +410,7 @@ async function refreshAll(){
       newCounts[apt.id]=allTxs.filter(tx=>!seen.has(tx.id)).length;
       lastSeen[apt.id]=new Set(allTxs.map(t=>t.id));
     }catch(e){console.error(apt.aptName,e);toast(`⚠ ${apt.aptName}: ${e.message}`,5000);}
-  }
+  }));
   saveSeen();
   document.getElementById('last-updated-label').textContent=`마지막 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
   renderGrid();isRefreshing=false;btn.disabled=false;btn.innerHTML='🔄 새로고침';
@@ -529,13 +543,9 @@ async function onAptNameInput(val) {
     try {
       // 캐시 없으면 API 조회 (3개월치)
       if (!acCache[regionCode]) {
-        const months = getLastNMonths(currentPeriod);
-        const all = [];
-        for (const ym of months) {
-          const txs = await fetchMonthData(regionCode, ym);
-          all.push(...txs);
-        }
-        acCache[regionCode] = all;
+        const ymds = getLastNMonths(currentPeriod);
+        const batchResult = await fetchBatch(regionCode, ymds);
+        acCache[regionCode] = Object.values(batchResult).flat();
       }
 
       const allTxs = acCache[regionCode];
@@ -621,8 +631,9 @@ async function addApartment(){
     const btn=document.querySelector('#add-modal .btn-primary');
     btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:13px;height:13px;border-width:2px"></span> 조회중...';
     try{
-      const months=getLastNMonths(currentPeriod);allTxs=[];
-      for(const ym of months){allTxs.push(...await fetchMonthData(region.code,ym));}
+      const ymds=getLastNMonths(currentPeriod);
+      const br=await fetchBatch(region.code,ymds);
+      allTxs=Object.values(br).flat();
       acCache[region.code]=allTxs;
     }catch(e){toast(`⚠ 조회 실패: ${e.message}`,5000);btn.disabled=false;btn.innerHTML='추가하기';return;}
     btn.disabled=false;btn.innerHTML='추가하기';
