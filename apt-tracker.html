@@ -523,13 +523,13 @@ function parseXML(xmlStr) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlStr, 'text/xml');
 
-  // API 오류 체크 (returnReasonCode가 00이 아닐 때만 에러)
-  const returnCode = doc.querySelector('returnReasonCode');
-  if (returnCode) {
-    const code = returnCode.textContent.trim();
-    if (code && code !== '00') {
-      const errMsg = doc.querySelector('errMsg')?.textContent?.trim() || '알 수 없는 오류';
-      throw new Error(`API 오류 (${code}): ${errMsg}`);
+  // API 오류 체크
+  const resultCode = doc.querySelector('resultCode');
+  if (resultCode) {
+    const code = resultCode.textContent.trim();
+    if (code && code !== '000' && code !== '00') {
+      const msg = doc.querySelector('resultMsg')?.textContent?.trim() || '알 수 없는 오류';
+      throw new Error(`API 오류 (${code}): ${msg}`);
     }
   }
 
@@ -537,17 +537,18 @@ function parseXML(xmlStr) {
   if (!items.length) return [];
   return Array.from(items).map(item => {
     const get = tag => item.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
-    const priceRaw = get('거래금액').replace(/,/g,'').replace(/\s/g,'');
+    const priceRaw = get('dealAmount').replace(/,/g,'').replace(/\s/g,'');
     const price = parseInt(priceRaw) || 0;
-    const yr = get('년'), mo = get('월').padStart(2,'0'), dy = get('일').padStart(2,'0');
+    const yr = get('dealYear'), mo = get('dealMonth').padStart(2,'0'), dy = get('dealDay').padStart(2,'0');
+    const cancelled = get('cdealType').trim();
     return {
-      aptName: get('아파트'), area: parseFloat(get('전용면적')) || 0,
-      floor: get('층'), price, year: yr, month: mo, day: dy,
-      buildYear: get('건축년도'), dong: get('법정동'),
-      cancelled: get('해제여부'),
-      id: `${get('아파트')}_${yr}${mo}${dy}_F${get('층')}_${get('전용면적')}`,
+      aptName: get('aptNm'), area: parseFloat(get('excluUseAr')) || 0,
+      floor: get('floor'), price, year: yr, month: mo, day: dy,
+      buildYear: get('buildYear'), dong: get('umdNm'),
+      cancelled,
+      id: `${get('aptNm')}_${yr}${mo}${dy}_F${get('floor')}_${get('excluUseAr')}`,
     };
-  }).filter(t => t.cancelled !== 'O' && t.price > 0 && t.aptName);
+  }).filter(t => t.cancelled !== '해제' && t.price > 0 && t.aptName);
 }
 
 async function fetchApt(apt) {
