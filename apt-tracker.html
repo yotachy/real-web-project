@@ -846,6 +846,7 @@ function renderChart(pyeong) {
   const defs = [];
   const paths = [];
   const dots = [];
+  const maxLabels = [];  // 최고가 라벨
 
   series.forEach((s, si) => {
     if (!s.txs.length) return;
@@ -871,12 +872,38 @@ function renderChart(pyeong) {
     if (areaPath) paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
     paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
 
+    // 최고가 포인트 찾기
+    const maxPt = pts.reduce((best, p) => p.tx.price > best.tx.price ? p : best, pts[0]);
+
     pts.forEach(p => {
+      const isMax = p === maxPt;
       const tip = `${s.apt?.aptName} · ${formatPrice(p.tx.price)} · ${p.tx.month}/${p.tx.day} · ${p.tx.floor}층`;
-      dots.push(`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${pts.length===1?6:4}" fill="${c.line}" stroke="#070b14" stroke-width="2"
+      // 최고가 점은 크게 + 테두리 강조
+      dots.push(`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isMax ? 6 : pts.length===1 ? 6 : 4}" fill="${c.line}" stroke="${isMax ? '#fff' : '#070b14'}" stroke-width="${isMax ? 2 : 2}"
         onmouseenter="showChartTooltip(event,${JSON.stringify(tip)})"
         onmouseleave="hideChartTooltip()"/>`);
     });
+
+    // 최고가 라벨: 가격 텍스트 + 수직선
+    const lx = maxPt.x;
+    const ly = maxPt.y;
+    const labelText = formatPrice(maxPt.tx.price);
+    // 라벨 위치: 포인트 위로 14px, 좌우 경계 고려
+    const labelY = Math.max(pad.t + 12, ly - 14);
+    const textAnchor = lx > W * 0.75 ? 'end' : lx < W * 0.25 ? 'start' : 'middle';
+    const labelX = textAnchor === 'end' ? Math.min(lx, W - pad.r - 2)
+                 : textAnchor === 'start' ? Math.max(lx, pad.l + 2)
+                 : lx;
+
+    maxLabels.push(`
+      <line x1="${lx.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${lx.toFixed(1)}" y2="${labelY.toFixed(1)}"
+        stroke="${c.line}" stroke-width="1.5" stroke-dasharray="3,2" opacity="0.7"/>
+      <rect x="${(labelX - (textAnchor==='middle'?28:textAnchor==='end'?56:0)).toFixed(1)}"
+            y="${(labelY - 12).toFixed(1)}" width="56" height="16" rx="4"
+            fill="#0e1320" opacity="0.85"/>
+      <text x="${labelX.toFixed(1)}" y="${(labelY).toFixed(1)}"
+        text-anchor="${textAnchor}" fill="${c.line}"
+        font-size="10" font-family="IBM Plex Mono" font-weight="600">${labelText}</text>`);
   });
 
   wrap.innerHTML = `
@@ -888,6 +915,7 @@ function renderChart(pyeong) {
       <line x1="${pad.l}" y1="${(pad.t+ch).toFixed(1)}" x2="${(W-pad.r).toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
       ${paths.join('')}
       ${dots.join('')}
+      ${maxLabels.join('')}
     </svg>
     <div id="chart-tooltip" style="position:fixed;display:none;background:#1a2235;border:1px solid #2a3550;border-radius:8px;padding:7px 12px;font-size:12px;color:#e2e8f0;pointer-events:none;z-index:999;white-space:nowrap;font-family:'IBM Plex Mono',monospace;box-shadow:0 4px 16px rgba(0,0,0,.5)"></div>`;
 
