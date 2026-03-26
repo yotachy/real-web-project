@@ -111,8 +111,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         try:
             lawd_cd = qs.get('LAWD_CD', [''])[0]
-            ymds    = qs.get('YMDS', [''])[0].split(',')
-            ymds    = [y.strip() for y in ymds if y.strip()]
+            ymds_raw = qs.get('YMDS', [''])[0]
+            ymds    = [y.strip() for y in ymds_raw.split(',') if y.strip() and len(y.strip())==6]
+            if not ymds:
+                self.respond(400, 'application/json', json.dumps({'error':'YMDS 파라미터 없음'}).encode())
+                return
 
             # 1단계: 원본 XML 병렬 수집
             raw_map = {}

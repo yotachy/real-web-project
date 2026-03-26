@@ -55,8 +55,8 @@
   .apt-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3);}
   .card-head{padding:14px 16px 12px;border-bottom:1px solid var(--border);background:#09111e;}
   .card-head-top{display:flex;justify-content:space-between;align-items:flex-start;}
-  .card-apt-name{font-size:15px;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;}
-  .card-region{font-size:12px;color:var(--muted);margin-top:2px;}
+  .card-apt-name{font-size:15px;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;}
+  .card-region{display:none;}
   .card-body{padding:14px 16px;}
   .card-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px;transition:color .15s;}
   .card-remove:hover{color:var(--down);}
@@ -384,11 +384,12 @@ function toast(msg,d=2500){
 }
 
 // ── 배치 fetch: 서버에서 여러 달 병렬 처리 ─────────────────────
-async function fetchBatch(lawdCd, ymds) {
+async function fetchBatchChunk(lawdCd, ymds) {
+  // 단일 청크 요청
   const url = `/batch?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-  const map = await res.json(); // { "202501": [{n,a,f,p,y,m,d}, ...], ... }
+  const map = await res.json();
   const result = {};
   for (const [ymd, items] of Object.entries(map)) {
     if (!Array.isArray(items)) { result[ymd] = []; continue; }
@@ -401,20 +402,30 @@ async function fetchBatch(lawdCd, ymds) {
           const yr = String(item.y||'');
           const area = parseFloat(item.a)||0;
           return {
-            aptName: item.n,
-            area,
-            floor:   String(item.f||'-'),
-            price:   item.p,
-            year:    yr,
-            month:   mo,
-            day:     dy,
-            id:      `${item.n}_${yr}${mo}${dy}_F${item.f}_${item.a}`,
+            aptName: item.n, area,
+            floor: String(item.f||'-'),
+            price: item.p, year: yr, month: mo, day: dy,
+            id: `${item.n}_${yr}${mo}${dy}_F${item.f}_${item.a}`,
           };
         } catch(e){ return null; }
       })
       .filter(Boolean);
   }
   return result;
+}
+
+async function fetchBatch(lawdCd, ymds) {
+  // URL 길이 초과 방지: 최대 12개월씩 청크 분할 후 병렬 요청
+  const CHUNK = 12;
+  const chunks = [];
+  for (let i = 0; i < ymds.length; i += CHUNK) {
+    chunks.push(ymds.slice(i, i + CHUNK));
+  }
+  const results = await Promise.all(chunks.map(c => fetchBatchChunk(lawdCd, c)));
+  // 청크 결과 합산
+  const merged = {};
+  for (const r of results) Object.assign(merged, r);
+  return merged;
 }
 
 async function fetchApt(apt) {
@@ -535,15 +546,18 @@ function renderCard(apt,delay=0){
   const txMap=transactions[apt.id];
   const newCnt=newCounts[apt.id]||0;
   const badge=newCnt>0?`<span class="badge-new">NEW +${newCnt}</span>`:'';
-  const ptags=apt.pyeongs.map(p=>`<span class="pyeong-tag">${PYEONG_DEFS[p].label}</span>`).join('');
+  const ptags=apt.pyeongs.length>1 ? apt.pyeongs.map(p=>`<span class="pyeong-tag">${PYEONG_DEFS[p].label}</span>`).join('') : '';
   let body='';
   if(!txMap){
     body=`<div class="card-loading"><span class="spinner"></span><br><br>조회중...</div>`;
   }else{
     body=apt.pyeongs.map(p=>{
       const txs=txMap[p]||[];const stats=calcStats(txs);
-      if(!stats) return `<div class="pyeong-section"><div class="pyeong-label">${PYEONG_DEFS[p].label}</div><div class="no-data">거래 없음 <span style="font-size:10px;color:var(--muted)">(신축·기간조정 확인)</span></div></div>`;
       const periodLabel = currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월';
+      if(!stats) return `<div class="pyeong-section">
+        <div class="pyeong-label" style="color:var(--muted2)">${apt.pyeongs.length > 1 ? PYEONG_DEFS[p].label+' · ' : ''}${periodLabel} · 거래없음</div>
+        <div class="no-data" style="font-size:11px;color:var(--muted)">신축이거나 해당 기간 거래가 없어요</div>
+        </div>\`;
       const chgVal = stats.change;
       const chgCls = chgVal===null?'neu':chgVal>0?'up':'down';
       const chgIcon = chgVal===null?'─':chgVal>0?'▲':'▼';
@@ -553,8 +567,10 @@ function renderCard(apt,delay=0){
       const allPrices = txs.map(t=>t.price);
       const minP = Math.min(...allPrices);
       const maxP = Math.max(...allPrices);
+      // 평형 2개 이상이면 구분자 표시, 1개면 기간+건수만
+      const pyeongPrefix = apt.pyeongs.length > 1 ? PYEONG_DEFS[p].label + ' · ' : '';
       return `<div class="pyeong-section">
-        <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">${periodLabel} ${stats.count}건</span></div>
+        <div class="pyeong-label" style="color:var(--muted2);font-weight:500">${pyeongPrefix}${periodLabel} ${stats.count}건</div>
         <div class="price-block">
           <div class="price-main">${formatPrice(stats.latest.price)}</div>
           <div class="price-sub-row">
@@ -578,8 +594,8 @@ function renderCard(apt,delay=0){
     <div class="card-head">
       <div class="card-head-top">
         <div style="flex:1;min-width:0"><div style="min-height:18px">${badge}</div>
-          <div class="card-apt-name">${apt.aptName}</div>
-          <div class="card-region">${apt.regionName}</div></div>
+          <div class="card-apt-name">${apt.aptName} <span style="font-size:11px;color:var(--muted);font-weight:400">${apt.regionName}</span></div>
+          <div class="card-region"></div></div>
         <button class="card-remove" onclick="event.stopPropagation();removeApt('${apt.id}')">×</button>
       </div>
       <div class="pyeong-tags">${ptags}</div>
