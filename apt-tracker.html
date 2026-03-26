@@ -33,10 +33,9 @@
   .chart-legend{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
   .chart-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted2);}
   .chart-legend-dot{width:8px;height:8px;border-radius:50%;}
-  .chart-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;}
-  .chart-stat{background:var(--card2);border-radius:8px;padding:10px 12px;text-align:center;}
-  .chart-stat-label{font-size:10px;color:var(--muted);margin-bottom:4px;}
-  .chart-stat-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;}
+  .chart-legend-bar{display:flex;gap:14px;flex-wrap:wrap;padding:10px 0 2px;align-items:center;}
+  .chart-legend-item{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--text);}
+  .chart-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
   /* 카드 선택 상태 */
   .apt-card.selected-a{border-color:#e8b84b !important;box-shadow:0 0 0 1px #e8b84b;}
   .apt-card.selected-b{border-color:#60a5fa !important;box-shadow:0 0 0 1px #60a5fa;}
@@ -45,11 +44,7 @@
   .apt-card.selected-b .card-apt-name::before{content:'② ';color:#60a5fa;}
   .apt-card.selected-c .card-apt-name::before{content:'③ ';color:#a78bfa;}
   .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
-  .chart-stats-compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px;}
-  .chart-stat-group{background:var(--card2);border-radius:10px;padding:12px 14px;}
-  .chart-stat-group-title{font-size:11px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
-  .chart-stat-row2{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
   @media(max-width:900px){.main-layout{grid-template-columns:1fr;}.chart-panel{position:static;min-height:360px;}.card-list{max-height:none;}}
   .apt-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s;animation:fadeUp .35s ease both;}
@@ -195,7 +190,7 @@
         <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 최대 3개까지 비교할 수 있어요</div>
         <div class="chart-body">
           <div class="chart-svg-wrap" id="chart-svg-wrap"></div>
-          <div class="chart-stats-row" id="chart-stats-row"></div>
+          <div class="chart-legend-bar" id="chart-legend-bar"></div>
         </div>
       </div>
     </div>
@@ -345,12 +340,22 @@ async function fetchBatch(lawdCd, ymds) {
   const url = `/batch?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-  const map = await res.json(); // { "202501": "<xml>...", ... }
+  const map = await res.json(); // { "202501": [{n,a,f,p,y,m,d}, ...], ... }
   const result = {};
-  for (const [ymd, xml] of Object.entries(map)) {
-    result[ymd] = parseXML(xml);
+  for (const [ymd, items] of Object.entries(map)) {
+    // 서버가 이미 필터링/파싱한 slim 객체 배열
+    result[ymd] = items.map(item => ({
+      aptName: item.n,
+      area:    parseFloat(item.a) || 0,
+      floor:   item.f,
+      price:   item.p,
+      year:    item.y,
+      month:   String(item.m).padStart(2,'0'),
+      day:     String(item.d).padStart(2,'0'),
+      id:      `${item.n}_${item.y}${String(item.m).padStart(2,'0')}${String(item.d).padStart(2,'0')}_F${item.f}_${item.a}`,
+    }));
   }
-  return result; // { ymd → [tx, ...] }
+  return result;
 }
 
 async function fetchApt(apt) {
@@ -380,10 +385,17 @@ function parseXML(xmlStr){
   return Array.from(items).map(item=>{
     const g=tag=>item.getElementsByTagName(tag)[0]?.textContent?.trim()||'';
     const price=parseInt(g('dealAmount').replace(/,/g,'').replace(/\s/g,''))||0;
+    if(!price) return null;
+    const cancelled=g('cdealType').trim();
+    if(cancelled==='해제') return null;
+    const aptNm=g('aptNm');
+    if(!aptNm) return null;
     const yr=g('dealYear'),mo=g('dealMonth').padStart(2,'0'),dy=g('dealDay').padStart(2,'0');
-    return{aptName:g('aptNm'),area:parseFloat(g('excluUseAr'))||0,floor:g('floor'),price,year:yr,month:mo,day:dy,
-      cancelled:g('cdealType').trim(),id:`${g('aptNm')}_${yr}${mo}${dy}_F${g('floor')}_${g('excluUseAr')}`};
-  }).filter(t=>t.cancelled!=='해제'&&t.price>0&&t.aptName);
+    const area=parseFloat(g('excluUseAr'))||0;
+    const floor=g('floor');
+    return{aptName:aptNm,area,floor,price,year:yr,month:mo,day:dy,
+      id:`${aptNm}_${yr}${mo}${dy}_F${floor}_${area}`};
+  }).filter(Boolean);
 }
 
 function calcStats(txs){
@@ -450,7 +462,7 @@ function renderCard(apt,delay=0){
         </div></div>`;
     }).join('');
   }
-  return `<div class="apt-card" style="animation-delay:${delay*.05}s" id="card-${apt.id}" onclick="selectCard('${apt.id}')">
+  return `<div class="apt-card" style="animation-delay:${delay*.05}s" id="card-${apt.id}" onclick="selectCard('${apt.id}');markRead('${apt.id}')">
     <div class="card-head">
       <div class="card-head-top">
         <div style="flex:1;min-width:0"><div style="min-height:18px">${badge}</div>
@@ -509,7 +521,7 @@ function openAddModal(){
 let pendingSearch = null;
 
 // 자동완성 상태
-let acCache = {};      // regionCode → 전체 tx 캐시
+let acCache = {};      // `${regionCode}_${period}` → 전체 tx 캐시
 let acTimer = null;
 let acFocusIdx = -1;
 let acResults = [];    // [{name, count}]
@@ -542,13 +554,14 @@ async function onAptNameInput(val) {
   acTimer = setTimeout(async () => {
     try {
       // 캐시 없으면 API 조회 (3개월치)
-      if (!acCache[regionCode]) {
+      const cacheKey = `${regionCode}_${currentPeriod}`;
+      if (!acCache[cacheKey]) {
         const ymds = getLastNMonths(currentPeriod);
         const batchResult = await fetchBatch(regionCode, ymds);
-        acCache[regionCode] = Object.values(batchResult).flat();
+        acCache[cacheKey] = Object.values(batchResult).flat();
       }
 
-      const allTxs = acCache[regionCode];
+      const allTxs = acCache[cacheKey];
       const keyword = val.trim();
 
       // 매칭 아파트명 + 건수 집계
@@ -626,7 +639,8 @@ async function addApartment(){
   const region=REGIONS.find(r=>r.code===document.getElementById('region-select').value);
 
   // 캐시된 데이터 사용, 없으면 재조회
-  let allTxs = acCache[region.code];
+  const ck = `${region.code}_${currentPeriod}`;
+  let allTxs = acCache[ck];
   if(!allTxs){
     const btn=document.querySelector('#add-modal .btn-primary');
     btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:13px;height:13px;border-width:2px"></span> 조회중...';
@@ -634,7 +648,7 @@ async function addApartment(){
       const ymds=getLastNMonths(currentPeriod);
       const br=await fetchBatch(region.code,ymds);
       allTxs=Object.values(br).flat();
-      acCache[region.code]=allTxs;
+      acCache[ck]=allTxs;
     }catch(e){toast(`⚠ 조회 실패: ${e.message}`,5000);btn.disabled=false;btn.innerHTML='추가하기';return;}
     btn.disabled=false;btn.innerHTML='추가하기';
   }
@@ -756,7 +770,7 @@ function switchChartTab(p, btn) {
 
 function renderChart(pyeong) {
   const wrap = document.getElementById('chart-svg-wrap');
-  const statsRow = document.getElementById('chart-stats-row');
+  const legendBar = document.getElementById('chart-legend-bar');
   if (!selectedAptIds.length) return;
 
   // 각 아파트별 데이터 준비 (날짜순 정렬)
@@ -772,7 +786,7 @@ function renderChart(pyeong) {
   const allTxs = series.flatMap(s => s.txs);
   if (!allTxs.length) {
     wrap.innerHTML = `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">선택한 평형의 거래 내역 없음</div>`;
-    statsRow.innerHTML = '';
+    legendBar.innerHTML = '';
     return;
   }
 
@@ -877,56 +891,15 @@ function renderChart(pyeong) {
     </svg>
     <div id="chart-tooltip" style="position:fixed;display:none;background:#1a2235;border:1px solid #2a3550;border-radius:8px;padding:7px 12px;font-size:12px;color:#e2e8f0;pointer-events:none;z-index:999;white-space:nowrap;font-family:'IBM Plex Mono',monospace;box-shadow:0 4px 16px rgba(0,0,0,.5)"></div>`;
 
-  // 통계 렌더
-  const isCompare = selectedAptIds.length > 1;
-  if (isCompare) {
-    statsRow.className = 'chart-stats-compare';
-    statsRow.innerHTML = series.map((s, si) => {
-      if (!s.txs.length) return `
-        <div class="chart-stat-group">
-          <div class="chart-stat-group-title">
-            <span class="color-dot" style="background:${s.color.line}"></span>
-            ${s.apt?.aptName}
-          </div>
-          <div style="font-size:12px;color:var(--muted)">해당 평형 거래 없음</div>
-        </div>`;
-      const prices = s.txs.map(t=>t.price);
-      const latest = s.txs[s.txs.length-1];
-      const prev2 = s.txs.length>1 ? s.txs[s.txs.length-2] : null;
-      const chg = prev2 ? ((latest.price-prev2.price)/prev2.price*100) : null;
-      const cc = chg===null?'#718096':chg>0?'#f87171':'#34d399';
-      return `
-        <div class="chart-stat-group">
-          <div class="chart-stat-group-title">
-            <span class="color-dot" style="background:${s.color.line}"></span>
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.apt?.aptName}</span>
-          </div>
-          <div class="chart-stat-row2">
-            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">최근 실거래</div>
-              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">${formatPrice(latest.price)}</div></div>
-            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">${currentPeriod>=12?(currentPeriod/12)+'년':currentPeriod+'개월'} 최저</div>
-              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#34d399">${formatPrice(Math.min(...prices))}</div></div>
-            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">거래 건수</div>
-              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#60a5fa">${s.txs.length}건</div></div>
-            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">직전 대비</div>
-              <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:${cc}">${chg===null?'-':(chg>0?'▲':'▼')+Math.abs(chg).toFixed(1)+'%'}</div></div>
-          </div>
-        </div>`;
-    }).join('');
-  } else {
-    statsRow.className = 'chart-stats-row';
-    const s = series[0];
-    if (!s.txs.length) { statsRow.innerHTML=''; return; }
-    const prices = s.txs.map(t=>t.price);
-    const latest = s.txs[s.txs.length-1];
-    const prev2 = s.txs.length>1?s.txs[s.txs.length-2]:null;
-    const chg = prev2?((latest.price-prev2.price)/prev2.price*100):null;
-    const cc = chg===null?'#718096':chg>0?'#f87171':'#34d399';
-    statsRow.innerHTML = `
-      <div class="chart-stat"><div class="chart-stat-label">최근 실거래</div><div class="chart-stat-val">${formatPrice(latest.price)}</div></div>
-      <div class="chart-stat"><div class="chart-stat-label">${currentPeriod>=12?(currentPeriod/12)+'년':currentPeriod+'개월'} 최저</div><div class="chart-stat-val up-color">${formatPrice(Math.min(...prices))}</div></div>
-      <div class="chart-stat"><div class="chart-stat-label">직전 대비</div><div class="chart-stat-val" style="color:${cc}">${chg===null?'-':(chg>0?'▲':'▼')+Math.abs(chg).toFixed(1)+'%'}</div></div>`;
-  }
+  // 레전드 렌더 (색상 + 아파트명만)
+  legendBar.innerHTML = series
+    .filter(s => s.apt)
+    .map(s => `
+      <div class="chart-legend-item">
+        <span class="chart-legend-dot" style="background:${s.color.line}"></span>
+        <span>${s.apt.aptName}</span>
+        ${!s.txs.length ? '<span style="font-size:10px;color:var(--muted);font-weight:400">(해당 평형 없음)</span>' : ''}
+      </div>`).join('');
 }
 
 function showChartTooltip(e, text) {
@@ -940,6 +913,19 @@ function showChartTooltip(e, text) {
 function hideChartTooltip() {
   const tt = document.getElementById('chart-tooltip');
   if (tt) tt.style.display = 'none';
+}
+
+function markRead(aptId) {
+  if (!newCounts[aptId]) return;
+  newCounts[aptId] = 0;
+  const card = document.getElementById('card-' + aptId);
+  if (card) {
+    const badge = card.querySelector('.badge-new');
+    if (badge) badge.remove();
+  }
+  const allTxs = Object.values(transactions[aptId] || {}).flat();
+  lastSeen[aptId] = new Set(allTxs.map(t => t.id));
+  saveSeen();
 }
 
 function removeApt(aptId) {

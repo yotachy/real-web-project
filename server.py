@@ -71,24 +71,66 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             self.respond(500, 'application/json', json.dumps({'error': str(e)}).encode())
 
-    # ── 배치: 여러 달 병렬 처리 → JSON 배열 반환 ───────────────
+    # ── 배치: 여러 달 병렬 처리 → 필요 필드만 JSON 반환 ──────────
     def handle_batch(self, qs):
+        import xml.etree.ElementTree as ET
+
+        def parse_slim(xml_str):
+            try:
+                root = ET.fromstring(xml_str)
+                items = []
+                for item in root.iter('item'):
+                    get = lambda t, i=item: (i.findtext(t) or '').strip()
+                    if get('cdealType') == '해제':
+                        continue
+                    price_raw = get('dealAmount').replace(',','').replace(' ','')
+                    if not price_raw.isdigit():
+                        continue
+                    price = int(price_raw)
+                    if not price:
+                        continue
+                    apt_nm = get('aptNm')
+                    if not apt_nm:
+                        continue
+                    items.append({
+                        'n': apt_nm,
+                        'a': get('excluUseAr'),
+                        'f': get('floor'),
+                        'p': price,
+                        'y': get('dealYear'),
+                        'm': get('dealMonth'),
+                        'd': get('dealDay'),
+                    })
+                return items
+            except Exception:
+                return []
+
         try:
             lawd_cd = qs.get('LAWD_CD', [''])[0]
-            ymds    = qs.get('YMDS', [''])[0].split(',')  # "202501,202502,..."
+            ymds    = qs.get('YMDS', [''])[0].split(',')
             ymds    = [y.strip() for y in ymds if y.strip()]
 
-            results = {}
+            # 1단계: 원본 XML 병렬 수집
+            raw_map = {}
             hits = 0
             with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(ymds))) as ex:
                 futures = {ex.submit(fetch_one, lawd_cd, ymd): ymd for ymd in ymds}
                 for future in as_completed(futures):
                     ymd, data, hit = future.result()
-                    results[ymd] = data
+                    raw_map[ymd] = data
                     if hit: hits += 1
 
-            print(f"[배치] {lawd_cd} {len(ymds)}개월 (캐시 {hits}건)")
-            payload = json.dumps(results).encode('utf-8')
+            # 2단계: 병렬 파싱 (필요 필드만)
+            results = {}
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                pfutures = {ex.submit(parse_slim, raw_map[ymd]): ymd for ymd in raw_map}
+                for future in as_completed(pfutures):
+                    ymd = pfutures[future]
+                    results[ymd] = future.result()
+
+            total = sum(len(v) for v in results.values())
+            print(f"[배치] {lawd_cd} {len(ymds)}개월 캐시:{hits}건 총:{total}건")
+            payload = json.dumps(results, ensure_ascii=False).encode('utf-8')
             self.respond(200, 'application/json; charset=utf-8', payload)
         except Exception as e:
             self.respond(500, 'application/json', json.dumps({'error': str(e)}).encode())
