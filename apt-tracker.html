@@ -555,15 +555,19 @@ async function fetchApt(apt) {
   const all = [];
   for (const ym of months) {
     const txs = await fetchMonthData(apt.lawdCd, ym);
+    console.log(`[${apt.aptName}] ${ym} → 전체 ${txs.length}건`);
+    if (txs.length > 0) {
+      console.log(`[${apt.aptName}] 아파트명 샘플:`, [...new Set(txs.map(t => t.aptName))].slice(0, 10));
+    }
     all.push(...txs);
   }
-  return all
-    .filter(tx =>
-      tx.aptName.includes(apt.aptName) &&
-      (!apt.minArea || tx.area >= apt.minArea) &&
-      (!apt.maxArea || tx.area <= apt.maxArea)
-    )
-    .sort((a,b) => `${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
+  const filtered = all.filter(tx =>
+    tx.aptName.includes(apt.aptName) &&
+    (!apt.minArea || tx.area >= apt.minArea) &&
+    (!apt.maxArea || tx.area <= apt.maxArea)
+  );
+  console.log(`[${apt.aptName}] 필터 후 ${filtered.length}건`);
+  return filtered.sort((a,b) => `${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
 }
 
 // ═══════════════════════════════════════════════════════════════
