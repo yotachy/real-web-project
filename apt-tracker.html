@@ -551,43 +551,49 @@ function renderCard(apt,delay=0){
   if(!txMap){
     body=`<div class="card-loading"><span class="spinner"></span><br><br>조회중...</div>`;
   }else{
-    body=apt.pyeongs.map(p=>{
-      const txs=txMap[p]||[];const stats=calcStats(txs);
-      const periodLabel = currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월';
-      if(!stats) return `<div class="pyeong-section">
-        <div class="pyeong-label" style="color:var(--muted2)">${apt.pyeongs.length > 1 ? PYEONG_DEFS[p].label+' · ' : ''}${periodLabel} · 거래없음</div>
-        <div class="no-data" style="font-size:11px;color:var(--muted)">신축이거나 해당 기간 거래가 없어요</div>
-        </div>\`;
-      const chgVal = stats.change;
-      const chgCls = chgVal===null?'neu':chgVal>0?'up':'down';
-      const chgIcon = chgVal===null?'─':chgVal>0?'▲':'▼';
-      const chgStr = chgVal===null?'-':`${chgIcon} ${Math.abs(chgVal).toFixed(1)}%`;
-      const prevTx = txs[1];
-      const prevPriceStr = prevTx ? formatPrice(prevTx.price) : null;
-      const allPrices = txs.map(t=>t.price);
-      const minP = Math.min(...allPrices);
-      const maxP = Math.max(...allPrices);
-      // 평형 2개 이상이면 구분자 표시, 1개면 기간+건수만
-      const pyeongPrefix = apt.pyeongs.length > 1 ? PYEONG_DEFS[p].label + ' · ' : '';
-      return `<div class="pyeong-section">
-        <div class="pyeong-label" style="color:var(--muted2);font-weight:500">${pyeongPrefix}${periodLabel} ${stats.count}건</div>
-        <div class="price-block">
-          <div class="price-main">${formatPrice(stats.latest.price)}</div>
-          <div class="price-sub-row">
-            ${prevPriceStr ? `<span class="price-prev">직전 <span>${prevPriceStr}</span></span><span class="chg-badge ${chgCls}">${chgStr}</span>` : `<span style="font-size:11px;color:var(--muted)">첫 거래</span>`}
-          </div>
-          <div class="price-meta">${pyeongStr(stats.latest.area)} · ${stats.latest.floor}층 · ${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</div>
-        </div>
-        <div class="range-row">
-          <div class="range-pill">
-            <div class="range-pill-label">↓ ${periodLabel} 최저</div>
-            <div class="range-pill-val" style="color:#34d399">${formatPrice(minP)}</div>
-          </div>
-          <div class="range-pill">
-            <div class="range-pill-label">↑ ${periodLabel} 최고</div>
-            <div class="range-pill-val" style="color:#f87171">${formatPrice(maxP)}</div>
-          </div>
-        </div></div>`;
+    body=apt.pyeongs.map(function(p){
+      var txs=txMap[p]||[];
+      var stats=calcStats(txs);
+      var periodLabel = currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월';
+      var pyeongPrefix = apt.pyeongs.length > 1 ? PYEONG_DEFS[p].label + ' · ' : '';
+      if(!stats){
+        return '<div class="pyeong-section">'
+          +'<div class="pyeong-label" style="color:var(--muted2)">'+pyeongPrefix+periodLabel+' · 거래없음</div>'
+          +'<div class="no-data" style="font-size:11px;color:var(--muted)">신축이거나 해당 기간 거래가 없어요</div>'
+          +'</div>';
+      }
+      var chgVal = stats.change;
+      var chgCls = chgVal===null?'neu':chgVal>0?'up':'down';
+      var chgIcon = chgVal===null?'─':chgVal>0?'▲':'▼';
+      var chgStr = chgVal===null?'-': chgIcon+' '+Math.abs(chgVal).toFixed(1)+'%';
+      var prevTx = txs[1];
+      var prevPriceStr = prevTx ? formatPrice(prevTx.price) : null;
+      var allPrices = txs.map(function(t){return t.price;});
+      var minP = Math.min.apply(null, allPrices);
+      var maxP = Math.max.apply(null, allPrices);
+      var subRow = prevPriceStr
+        ? '<span class="price-prev">직전 <span>'+prevPriceStr+'</span></span>'
+          +'<span class="chg-badge '+chgCls+'">'+chgStr+'</span>'
+        : '<span style="font-size:11px;color:var(--muted)">첫 거래</span>';
+      return '<div class="pyeong-section">'
+        +'<div class="pyeong-label" style="color:var(--muted2);font-weight:500">'+pyeongPrefix+periodLabel+' '+stats.count+'건</div>'
+        +'<div class="price-block">'
+          +'<div class="price-main">'+formatPrice(stats.latest.price)+'</div>'
+          +'<div class="price-sub-row">'+subRow+'</div>'
+          +'<div class="price-meta">'+pyeongStr(stats.latest.area)+' · '+stats.latest.floor+'층 · '
+            +stats.latest.year+'.'+stats.latest.month+'.'+stats.latest.day+'</div>'
+        +'</div>'
+        +'<div class="range-row">'
+          +'<div class="range-pill">'
+            +'<div class="range-pill-label">↓ '+periodLabel+' 최저</div>'
+            +'<div class="range-pill-val" style="color:#34d399">'+formatPrice(minP)+'</div>'
+          +'</div>'
+          +'<div class="range-pill">'
+            +'<div class="range-pill-label">↑ '+periodLabel+' 최고</div>'
+            +'<div class="range-pill-val" style="color:#f87171">'+formatPrice(maxP)+'</div>'
+          +'</div>'
+        +'</div>'
+      +'</div>';
     }).join('');
   }
   return `<div class="apt-card" style="animation-delay:${delay*.05}s" id="card-${apt.id}" onclick="selectCard('${apt.id}');markRead('${apt.id}')">
