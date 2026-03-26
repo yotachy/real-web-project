@@ -65,9 +65,16 @@
   .pyeong-section{padding:10px 0;border-bottom:1px solid var(--border);}
   .pyeong-section:last-child{border-bottom:none;padding-bottom:0;}
   .pyeong-label{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px;}
-  .latest-price{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;}
-  .latest-meta{font-size:11px;color:var(--muted);margin-top:2px;}
-  .stat-box{background:var(--card2);border-radius:8px;padding:8px 12px;margin-top:8px;display:flex;justify-content:space-between;}
+  .latest-label{font-size:10px;color:var(--muted2);font-weight:500;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;}
+  .latest-price{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;letter-spacing:-0.5px;}
+  .latest-meta{font-size:11px;color:var(--muted);margin-top:3px;}
+  .change-row{display:flex;align-items:center;gap:6px;margin-top:6px;}
+  .change-badge{display:inline-flex;align-items:center;gap:3px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;}
+  .change-badge.up{background:rgba(52,211,153,0.12);color:#34d399;}
+  .change-badge.down{background:rgba(248,113,113,0.12);color:#f87171;}
+  .change-badge.neu{background:rgba(113,128,150,0.12);color:#718096;}
+  .change-meta{font-size:10px;color:var(--muted);}
+  .stat-box{background:var(--card2);border-radius:8px;padding:8px 12px;margin-top:10px;display:flex;justify-content:space-between;}
   .stat-item{text-align:center;}
   .stat-label{font-size:10px;color:var(--muted);margin-bottom:3px;}
   .stat-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;}
@@ -188,6 +195,7 @@
         <button class="period-btn active" data-months="3" onclick="setPeriod(this)">3개월</button>
         <button class="period-btn" data-months="6" onclick="setPeriod(this)">6개월</button>
         <button class="period-btn" data-months="12" onclick="setPeriod(this)">1년</button>
+        <button class="period-btn" data-months="36" onclick="setPeriod(this)">3년</button>
         <button class="period-btn" data-months="60" onclick="setPeriod(this)">5년</button>
       </div>
       <button class="btn-ghost" id="refresh-btn" onclick="refreshAll()">🔄 새로고침</button>
@@ -529,15 +537,24 @@ function renderCard(apt,delay=0){
     body=apt.pyeongs.map(p=>{
       const txs=txMap[p]||[];const stats=calcStats(txs);
       if(!stats) return `<div class="pyeong-section"><div class="pyeong-label">${PYEONG_DEFS[p].label}</div><div class="no-data">거래 없음 <span style="font-size:10px;color:var(--muted)">(신축·기간조정 확인)</span></div></div>`;
-      const cc=stats.change===null?'neu-color':stats.change>0?'down-color':'up-color';
-      const cs=stats.change===null?'-':`${stats.change>0?'▲':'▼'} ${Math.abs(stats.change).toFixed(1)}%`;
+      const periodLabel = currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월';
+      const chgVal = stats.change;
+      const chgCls = chgVal===null?'neu':chgVal>0?'up':'down';
+      // 증가=초록(up), 감소=빨강(down) — 부동산은 올라도 내려도 중립 표기
+      const chgIcon = chgVal===null?'─':chgVal>0?'▲':'▼';
+      const chgStr = chgVal===null?'변동없음':`${chgIcon} ${Math.abs(chgVal).toFixed(1)}%`;
       return `<div class="pyeong-section">
-        <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">${currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월'} ${stats.count}건</span></div>
+        <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">${periodLabel} ${stats.count}건</span></div>
+        <div class="latest-label">최근 실거래가</div>
         <div class="latest-price">${formatPrice(stats.latest.price)}</div>
         <div class="latest-meta">${pyeongStr(stats.latest.area)} · ${stats.latest.floor}층 · ${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</div>
+        <div class="change-row">
+          <span class="change-badge ${chgCls}">${chgStr}</span>
+          <span class="change-meta">직전 거래 대비</span>
+        </div>
         <div class="stat-box">
-          <div class="stat-item"><div class="stat-label">${currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월'} 최저가</div><div class="stat-val up-color">${formatPrice(stats.minPrice)}</div></div>
-          <div class="stat-item"><div class="stat-label">직전 대비</div><div class="stat-val ${cc}">${cs}</div></div>
+          <div class="stat-item"><div class="stat-label">${periodLabel} 최저가</div><div class="stat-val" style="color:#34d399">${formatPrice(stats.minPrice)}</div></div>
+          <div class="stat-item"><div class="stat-label">${periodLabel} 최고가</div><div class="stat-val" style="color:#f87171">${formatPrice(Math.max(...(txMap[p]||[]).map(t=>t.price)))}</div></div>
         </div></div>`;
     }).join('');
   }
@@ -923,7 +940,7 @@ function renderChart(pyeong) {
   {
     // 눈금 간격 결정
     // 3개월→매월, 6개월→매월, 1년→격월, 5년→6개월마다
-    const intervalMonths = currentPeriod <= 6 ? 1 : currentPeriod <= 12 ? 2 : 6;
+    const intervalMonths = currentPeriod <= 6 ? 1 : currentPeriod <= 12 ? 2 : currentPeriod <= 36 ? 3 : 6;
 
     // startDate의 다음 달 1일부터 시작
     let cursor = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
