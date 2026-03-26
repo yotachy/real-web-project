@@ -523,12 +523,14 @@ function parseXML(xmlStr) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlStr, 'text/xml');
 
-  // API 오류 체크
-  const errMsg = doc.querySelector('errMsg');
-  const returnMsg = doc.querySelector('returnReasonCode');
-  if (errMsg) {
-    const msg = errMsg.textContent.trim();
-    if (msg && msg !== 'OK') throw new Error(`API 오류: ${msg}`);
+  // API 오류 체크 (returnReasonCode가 00이 아닐 때만 에러)
+  const returnCode = doc.querySelector('returnReasonCode');
+  if (returnCode) {
+    const code = returnCode.textContent.trim();
+    if (code && code !== '00') {
+      const errMsg = doc.querySelector('errMsg')?.textContent?.trim() || '알 수 없는 오류';
+      throw new Error(`API 오류 (${code}): ${errMsg}`);
+    }
   }
 
   const items = doc.querySelectorAll('item');
