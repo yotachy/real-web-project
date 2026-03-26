@@ -40,10 +40,12 @@
   /* 카드 선택 상태 */
   .apt-card.selected-a{border-color:#e8b84b !important;box-shadow:0 0 0 1px #e8b84b;}
   .apt-card.selected-b{border-color:#60a5fa !important;box-shadow:0 0 0 1px #60a5fa;}
+  .apt-card.selected-c{border-color:#a78bfa !important;box-shadow:0 0 0 1px #a78bfa;}
   .apt-card.selected-a .card-apt-name::before{content:'① ';color:#e8b84b;}
   .apt-card.selected-b .card-apt-name::before{content:'② ';color:#60a5fa;}
+  .apt-card.selected-c .card-apt-name::before{content:'③ ';color:#a78bfa;}
   .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
-  .chart-stats-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+  .chart-stats-compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:14px;}
   .chart-stat-group{background:var(--card2);border-radius:10px;padding:12px 14px;}
   .chart-stat-group-title{font-size:11px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
@@ -178,7 +180,7 @@
           <div class="chart-apt-sub" id="chart-apt-sub">-</div>
         </div>
         <div class="chart-tabs" id="chart-tabs"></div>
-        <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 비교할 수 있어요</div>
+        <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 최대 3개까지 비교할 수 있어요</div>
         <div class="chart-body">
           <div class="chart-svg-wrap" id="chart-svg-wrap"></div>
           <div class="chart-stats-row" id="chart-stats-row"></div>
@@ -639,6 +641,7 @@ async function addApartment(){
 const CHART_COLORS = [
   {line:'#e8b84b', area:'rgba(232,184,75,0.15)', cls:'selected-a'},
   {line:'#60a5fa', area:'rgba(96,165,250,0.15)',  cls:'selected-b'},
+  {line:'#a78bfa', area:'rgba(167,139,250,0.15)', cls:'selected-c'},
 ];
 let selectedAptIds = []; // 최대 2개
 let chartActivePyeong = null;
@@ -649,8 +652,8 @@ function selectCard(aptId) {
     // 이미 선택된 카드 → 해제
     selectedAptIds.splice(idx, 1);
   } else {
-    if (selectedAptIds.length >= 2) {
-      // 2개 이미 선택 → 첫번째 교체
+    if (selectedAptIds.length >= 3) {
+      // 3개 이미 선택 → 첫번째 교체
       selectedAptIds.shift();
     }
     selectedAptIds.push(aptId);
