@@ -154,7 +154,11 @@
   .autocomplete-item-name{font-size:13px;font-weight:600;color:var(--text);}
   .autocomplete-item-count{font-size:11px;color:var(--muted);margin-left:8px;flex-shrink:0;}
   .autocomplete-searching{padding:12px 14px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;}
-  @media(max-width:480px){#dashboard-screen{padding:16px 12px 80px;}.header-title{font-size:17px;}}
+  .period-btns{display:flex;gap:6px;}
+  .period-btn{background:transparent;border:1.5px solid var(--border);color:var(--muted2);padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
+  .period-btn:hover{border-color:var(--border2);color:var(--text);}
+  .period-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+  @media(max-width:480px){#dashboard-screen{padding:16px 12px 80px;}.header-title{font-size:17px;}.period-btn{padding:6px 10px;font-size:12px;}}
 </style>
 </head>
 <body>
@@ -164,7 +168,15 @@
       <div class="header-title"><span>실거래가</span> 모니터</div>
       <div class="header-sub" id="last-updated-label">아파트를 추가해서 추적을 시작하세요</div>
     </div>
-    <button class="btn-ghost" id="refresh-btn" onclick="refreshAll()">🔄 새로고침</button>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+      <div class="period-btns">
+        <button class="period-btn active" data-months="3" onclick="setPeriod(this)">3개월</button>
+        <button class="period-btn" data-months="6" onclick="setPeriod(this)">6개월</button>
+        <button class="period-btn" data-months="12" onclick="setPeriod(this)">1년</button>
+        <button class="period-btn" data-months="60" onclick="setPeriod(this)">5년</button>
+      </div>
+      <button class="btn-ghost" id="refresh-btn" onclick="refreshAll()">🔄 새로고침</button>
+    </div>
   </div>
   <div class="main-layout">
     <div class="card-list" id="apt-grid"></div>
@@ -350,7 +362,7 @@ function parseXML(xmlStr){
   }).filter(t=>t.cancelled!=='해제'&&t.price>0&&t.aptName);
 }
 async function fetchApt(apt){
-  const months=getLastNMonths(3);const all=[];
+  const months=getLastNMonths(currentPeriod);const all=[];
   for(const ym of months){const txs=await fetchMonthData(apt.lawdCd,ym);all.push(...txs);}
   const matched=all.filter(tx=>tx.aptName.includes(apt.aptName));
   const result={};
@@ -415,11 +427,11 @@ function renderCard(apt,delay=0){
       const cc=stats.change===null?'neu-color':stats.change>0?'down-color':'up-color';
       const cs=stats.change===null?'-':`${stats.change>0?'▲':'▼'} ${Math.abs(stats.change).toFixed(1)}%`;
       return `<div class="pyeong-section">
-        <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">3개월 ${stats.count}건</span></div>
+        <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">${currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월'} ${stats.count}건</span></div>
         <div class="latest-price">${formatPrice(stats.latest.price)}</div>
         <div class="latest-meta">${pyeongStr(stats.latest.area)} · ${stats.latest.floor}층 · ${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</div>
         <div class="stat-box">
-          <div class="stat-item"><div class="stat-label">3개월 최저가</div><div class="stat-val up-color">${formatPrice(stats.minPrice)}</div></div>
+          <div class="stat-item"><div class="stat-label">${currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월'} 최저가</div><div class="stat-val up-color">${formatPrice(stats.minPrice)}</div></div>
           <div class="stat-item"><div class="stat-label">직전 대비</div><div class="stat-val ${cc}">${cs}</div></div>
         </div></div>`;
     }).join('');
@@ -517,7 +529,7 @@ async function onAptNameInput(val) {
     try {
       // 캐시 없으면 API 조회 (3개월치)
       if (!acCache[regionCode]) {
-        const months = getLastNMonths(3);
+        const months = getLastNMonths(currentPeriod);
         const all = [];
         for (const ym of months) {
           const txs = await fetchMonthData(regionCode, ym);
@@ -609,7 +621,7 @@ async function addApartment(){
     const btn=document.querySelector('#add-modal .btn-primary');
     btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:13px;height:13px;border-width:2px"></span> 조회중...';
     try{
-      const months=getLastNMonths(3);allTxs=[];
+      const months=getLastNMonths(currentPeriod);allTxs=[];
       for(const ym of months){allTxs.push(...await fetchMonthData(region.code,ym));}
       acCache[region.code]=allTxs;
     }catch(e){toast(`⚠ 조회 실패: ${e.message}`,5000);btn.disabled=false;btn.innerHTML='추가하기';return;}
@@ -637,13 +649,32 @@ async function addApartment(){
   setTimeout(()=>selectCard(apt.id),100);
 }
 // ─── 선택된 카드 & 차트 ──────────────────────────────────────────
+// ─── 기간 선택 ──────────────────────────────────────────────────
+function setPeriod(btn) {
+  const months = parseInt(btn.dataset.months);
+  if (months === currentPeriod) return;
+  currentPeriod = months;
+
+  // 버튼 상태
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // 캐시 무효화 → 새 기간으로 재조회
+  acCache = {};
+  Object.keys(transactions).forEach(k => delete transactions[k]);
+  renderGrid();
+
+  if (apartments.length > 0) refreshAll();
+}
+
 // ─── 비교 차트 ──────────────────────────────────────────────────
 const CHART_COLORS = [
   {line:'#e8b84b', area:'rgba(232,184,75,0.15)', cls:'selected-a'},
   {line:'#60a5fa', area:'rgba(96,165,250,0.15)',  cls:'selected-b'},
   {line:'#a78bfa', area:'rgba(167,139,250,0.15)', cls:'selected-c'},
 ];
-let selectedAptIds = []; // 최대 2개
+let selectedAptIds = []; // 최대 3개
+let currentPeriod = 3;   // 조회 기간(개월)
 let chartActivePyeong = null;
 
 function selectCard(aptId) {
@@ -681,7 +712,7 @@ function selectCard(aptId) {
   // 헤더 텍스트
   const names = selectedAptIds.map(id => apartments.find(a=>a.id===id)?.aptName || '').filter(Boolean);
   document.getElementById('chart-apt-name').textContent = names.join(' vs ');
-  document.getElementById('chart-apt-sub').textContent = '최근 3개월 실거래 비교';
+  document.getElementById('chart-apt-sub').textContent = `최근 ${currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월'} 실거래 비교`;
 
   // 비교 힌트
   const hint = document.getElementById('compare-hint');
@@ -736,7 +767,7 @@ function renderChart(pyeong) {
 
   // 전체 날짜 범위 계산 (3개월 고정)
   const now = new Date();
-  const startDate = new Date(now.getFullYear(), now.getMonth()-2, 1);
+  const startDate = new Date(now.getFullYear(), now.getMonth()-(currentPeriod-1), 1);
   const endDate = now;
   const totalDays = Math.max((endDate - startDate) / 86400000, 1);
 
@@ -777,8 +808,9 @@ function renderChart(pyeong) {
 
   // X축: 월 기준으로 눈금
   const xAxisLabels = [];
-  for (let m=0; m<=2; m++) {
-    const d = new Date(now.getFullYear(), now.getMonth()-2+m, 1);
+  const tickCount = currentPeriod <= 3 ? currentPeriod : currentPeriod <= 12 ? Math.ceil(currentPeriod/2) : Math.ceil(currentPeriod/12);
+  for (let m=0; m<=tickCount; m++) {
+    const d = new Date(now.getFullYear(), now.getMonth()-(currentPeriod-1)+Math.round((currentPeriod/tickCount)*m), 1);
     const ratio = Math.max(0, Math.min(1, (d - startDate)/(endDate-startDate)));
     const x = pad.l + ratio * cw;
     xAxisLabels.push(`<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" fill="#4a5568" font-size="10">${d.getMonth()+1}월</text>`);
@@ -861,7 +893,7 @@ function renderChart(pyeong) {
           <div class="chart-stat-row2">
             <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">최근 실거래</div>
               <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">${formatPrice(latest.price)}</div></div>
-            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">3개월 최저</div>
+            <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">${currentPeriod>=12?(currentPeriod/12)+'년':currentPeriod+'개월'} 최저</div>
               <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#34d399">${formatPrice(Math.min(...prices))}</div></div>
             <div><div class="stat-label" style="font-size:10px;color:var(--muted);margin-bottom:3px">거래 건수</div>
               <div class="stat-val" style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#60a5fa">${s.txs.length}건</div></div>
@@ -881,7 +913,7 @@ function renderChart(pyeong) {
     const cc = chg===null?'#718096':chg>0?'#f87171':'#34d399';
     statsRow.innerHTML = `
       <div class="chart-stat"><div class="chart-stat-label">최근 실거래</div><div class="chart-stat-val">${formatPrice(latest.price)}</div></div>
-      <div class="chart-stat"><div class="chart-stat-label">3개월 최저</div><div class="chart-stat-val up-color">${formatPrice(Math.min(...prices))}</div></div>
+      <div class="chart-stat"><div class="chart-stat-label">${currentPeriod>=12?(currentPeriod/12)+'년':currentPeriod+'개월'} 최저</div><div class="chart-stat-val up-color">${formatPrice(Math.min(...prices))}</div></div>
       <div class="chart-stat"><div class="chart-stat-label">직전 대비</div><div class="chart-stat-val" style="color:${cc}">${chg===null?'-':(chg>0?'▲':'▼')+Math.abs(chg).toFixed(1)+'%'}</div></div>`;
   }
 }
@@ -927,7 +959,7 @@ function openDetail(aptId){
     lastSeen[aptId]=new Set(allTxs.map(t=>t.id));saveSeen();renderGrid();
   }
   document.getElementById('sheet-title').textContent=apt.aptName;
-  document.getElementById('sheet-sub').textContent=`${apt.regionName} · 최근 3개월 실거래`;
+  document.getElementById('sheet-sub').textContent=`${apt.regionName} · 최근 ${currentPeriod>=12?(currentPeriod/12)+'년':currentPeriod+'개월'} 실거래`;
   document.getElementById('detail-tabs').innerHTML=apt.pyeongs.map(p=>
     `<button class="detail-tab${p===apt.pyeongs[0]?' active':''}" onclick="switchDetailTab('${p}',this)">${PYEONG_DEFS[p].label}</button>`
   ).join('');
