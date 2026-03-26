@@ -40,9 +40,13 @@
   .apt-card.selected-a{border-color:#e8b84b !important;box-shadow:0 0 0 1px #e8b84b;}
   .apt-card.selected-b{border-color:#60a5fa !important;box-shadow:0 0 0 1px #60a5fa;}
   .apt-card.selected-c{border-color:#a78bfa !important;box-shadow:0 0 0 1px #a78bfa;}
+  .apt-card.selected-d{border-color:#34d399 !important;box-shadow:0 0 0 1px #34d399;}
+  .apt-card.selected-e{border-color:#fb923c !important;box-shadow:0 0 0 1px #fb923c;}
   .apt-card.selected-a .card-apt-name::before{content:'① ';color:#e8b84b;}
   .apt-card.selected-b .card-apt-name::before{content:'② ';color:#60a5fa;}
   .apt-card.selected-c .card-apt-name::before{content:'③ ';color:#a78bfa;}
+  .apt-card.selected-d .card-apt-name::before{content:'④ ';color:#34d399;}
+  .apt-card.selected-e .card-apt-name::before{content:'⑤ ';color:#fb923c;}
   .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
@@ -203,7 +207,7 @@
           <div class="chart-apt-sub" id="chart-apt-sub">-</div>
         </div>
         <div class="chart-tabs" id="chart-tabs"></div>
-        <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 최대 3개까지 비교할 수 있어요</div>
+        <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 최대 5개까지 비교할 수 있어요</div>
         <div class="chart-body">
           <div class="chart-svg-wrap" id="chart-svg-wrap"></div>
           <div class="chart-legend-bar" id="chart-legend-bar"></div>
@@ -724,11 +728,13 @@ function setPeriod(btn) {
 
 // ─── 비교 차트 ──────────────────────────────────────────────────
 const CHART_COLORS = [
-  {line:'#e8b84b', area:'rgba(232,184,75,0.15)', cls:'selected-a'},
-  {line:'#60a5fa', area:'rgba(96,165,250,0.15)',  cls:'selected-b'},
-  {line:'#a78bfa', area:'rgba(167,139,250,0.15)', cls:'selected-c'},
+  {line:'#e8b84b', area:'rgba(232,184,75,0.15)',  cls:'selected-a'},
+  {line:'#60a5fa', area:'rgba(96,165,250,0.15)',   cls:'selected-b'},
+  {line:'#a78bfa', area:'rgba(167,139,250,0.15)',  cls:'selected-c'},
+  {line:'#34d399', area:'rgba(52,211,153,0.15)',   cls:'selected-d'},
+  {line:'#fb923c', area:'rgba(251,146,60,0.15)',   cls:'selected-e'},
 ];
-let selectedAptIds = []; // 최대 3개
+let selectedAptIds = []; // 최대 5개
 let currentPeriod = 3;   // 조회 기간(개월)
 let chartActivePyeong = null;
 
@@ -738,8 +744,8 @@ function selectCard(aptId) {
     // 이미 선택된 카드 → 해제
     selectedAptIds.splice(idx, 1);
   } else {
-    if (selectedAptIds.length >= 3) {
-      // 3개 이미 선택 → 첫번째 교체
+    if (selectedAptIds.length >= 5) {
+      // 5개 이미 선택 → 첫번째 교체
       selectedAptIds.shift();
     }
     selectedAptIds.push(aptId);
@@ -747,7 +753,7 @@ function selectCard(aptId) {
 
   // 카드 하이라이트 초기화 후 재적용
   document.querySelectorAll('.apt-card').forEach(c => {
-    c.classList.remove('selected-a','selected-b','selected-c');
+    c.classList.remove('selected-a','selected-b','selected-c','selected-d','selected-e');
   });
   selectedAptIds.forEach((id, i) => {
     const card = document.getElementById('card-' + id);
@@ -1070,7 +1076,7 @@ function removeApt(aptId) {
   apartments=apartments.filter(a=>a.id!==aptId);delete transactions[aptId];delete newCounts[aptId];
   if(selectedAptIds.includes(aptId)){
     selectedAptIds = selectedAptIds.filter(id=>id!==aptId);
-    document.querySelectorAll('.apt-card').forEach(c=>c.classList.remove('selected-a','selected-b'));
+    document.querySelectorAll('.apt-card').forEach(c=>c.classList.remove('selected-a','selected-b','selected-c','selected-d','selected-e'));
     selectedAptIds.forEach((id,i)=>{
       const card=document.getElementById('card-'+id);
       if(card) card.classList.add(CHART_COLORS[i].cls);
