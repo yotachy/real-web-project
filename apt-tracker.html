@@ -7,358 +7,140 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #070b14; --card: #0e1320; --card2: #0b0f1c;
-    --border: #1a2235; --border2: #2a3550;
-    --accent: #e8b84b; --accent-dim: rgba(232,184,75,0.15);
-    --text: #e2e8f0; --muted: #4a5568; --muted2: #718096;
-    --up: #34d399; --down: #f87171; --blue: #60a5fa;
+  :root{--bg:#070b14;--card:#0e1320;--card2:#0b0f1c;--border:#1a2235;--border2:#2a3550;--accent:#e8b84b;--accent-dim:rgba(232,184,75,0.15);--text:#e2e8f0;--muted:#4a5568;--muted2:#718096;--up:#34d399;--down:#f87171;--blue:#60a5fa;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;overflow-x:hidden;}
+  ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+  #dashboard-screen{padding:24px 20px 80px;max-width:960px;margin:0 auto;}
+  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;padding-top:4px;}
+  .header-title{font-size:20px;font-weight:900;}.header-title span{color:var(--accent);}
+  .header-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+  .apt-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s;animation:fadeUp .35s ease both;}
+  .apt-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.3);}
+  .card-head{padding:14px 16px 12px;border-bottom:1px solid var(--border);background:#09111e;}
+  .card-head-top{display:flex;justify-content:space-between;align-items:flex-start;}
+  .card-apt-name{font-size:15px;font-weight:700;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;}
+  .card-region{font-size:12px;color:var(--muted);margin-top:2px;}
+  .card-body{padding:14px 16px;}
+  .card-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 4px;transition:color .15s;}
+  .card-remove:hover{color:var(--down);}
+  .pyeong-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+  .pyeong-tag{font-size:11px;background:#131a28;color:var(--muted2);padding:2px 9px;border-radius:99px;}
+  .pyeong-section{padding:10px 0;border-bottom:1px solid var(--border);}
+  .pyeong-section:last-child{border-bottom:none;padding-bottom:0;}
+  .pyeong-label{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px;}
+  .latest-price{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;}
+  .latest-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+  .stat-box{background:var(--card2);border-radius:8px;padding:8px 12px;margin-top:8px;display:flex;justify-content:space-between;}
+  .stat-item{text-align:center;}
+  .stat-label{font-size:10px;color:var(--muted);margin-bottom:3px;}
+  .stat-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;}
+  .no-data{font-size:12px;color:var(--muted);padding:8px 0;}
+  .badge-new{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(232,184,75,.4);animation:pulse 2s infinite;}
+  .btn-primary{background:var(--accent);color:#0a0a0a;border:none;padding:11px 22px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:opacity .15s;width:100%;}
+  .btn-primary:hover{opacity:.88;}
+  .btn-ghost{background:transparent;color:var(--muted2);border:1px solid var(--border);padding:9px 16px;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;white-space:nowrap;}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+  .btn-ghost:disabled{opacity:.5;cursor:not-allowed;}
+  .pyeong-btns{display:flex;gap:8px;flex-wrap:wrap;}
+  .pyeong-btn{
+    background:#0d1422;border:1.5px solid var(--border);color:var(--muted);
+    padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;
+    font-family:'Noto Sans KR',sans-serif;transition:all .15s;
+    position:relative;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    background: var(--bg); color: var(--text);
-    font-family: 'Noto Sans KR', sans-serif;
-    min-height: 100vh; overflow-x: hidden;
+  .pyeong-btn:hover:not([style*="none"]){border-color:var(--border2);color:var(--muted2);}
+  .pyeong-btn.active{
+    background:var(--accent);border-color:var(--accent);
+    color:#000;font-weight:700;
+    box-shadow:0 2px 10px rgba(232,184,75,0.35);
   }
-  ::-webkit-scrollbar { width: 5px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
-
-  /* ── LAYOUT ── */
-  .screen { display: none; }
-  .screen.active { display: block; }
-
-  /* ── SETUP ── */
-  #setup-screen {
-    min-height: 100vh; display: flex; align-items: center;
-    justify-content: center; padding: 24px;
+  .pyeong-btn.active::after{
+    content:'✓';margin-left:5px;font-size:12px;
   }
-  .setup-card {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 18px; padding: 44px 40px; max-width: 500px; width: 100%;
-    animation: fadeUp 0.4s ease;
-  }
-  .setup-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
-  .setup-title {
-    text-align: center; font-size: 26px; font-weight: 900; margin-bottom: 8px;
-  }
-  .setup-title span { color: var(--accent); }
-  .setup-sub { text-align: center; color: var(--muted2); font-size: 14px; line-height: 1.7; margin-bottom: 28px; }
-  .how-to {
-    background: #080c18; border: 1px solid var(--border);
-    border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;
-  }
-  .how-to-title { color: var(--accent); font-size: 12px; font-weight: 700; margin-bottom: 12px; }
-  .how-to-step { display: flex; gap: 10px; margin-bottom: 7px; font-size: 13px; }
-  .how-to-num { color: var(--accent); font-weight: 700; min-width: 18px; }
-  .how-to-text { color: #94a3b8; }
-  .how-to-step:last-child { margin-bottom: 0; }
-
-  /* ── DASHBOARD ── */
-  #dashboard-screen { padding: 24px 20px 80px; max-width: 960px; margin: 0 auto; }
-  .header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 28px; padding-top: 4px;
-  }
-  .header-title { font-size: 20px; font-weight: 900; }
-  .header-title span { color: var(--accent); }
-  .header-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .header-actions { display: flex; gap: 8px; align-items: center; }
-
-  /* ── GRID ── */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-
-  /* ── CARD ── */
-  .apt-card {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 14px; overflow: hidden; cursor: pointer;
-    transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
-    animation: fadeUp 0.35s ease both;
-  }
-  .apt-card:hover {
-    border-color: var(--border2);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-  }
-  .card-head {
-    padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
-    background: #09111e;
-  }
-  .card-head-top { display: flex; justify-content: space-between; align-items: flex-start; }
-  .card-apt-name {
-    font-size: 15px; font-weight: 700; margin-top: 4px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    max-width: 200px;
-  }
-  .card-region { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .card-body { padding: 16px; }
-  .card-remove {
-    background: none; border: none; color: var(--muted); cursor: pointer;
-    font-size: 18px; line-height: 1; padding: 2px 4px; border-radius: 4px;
-    transition: color 0.15s;
-  }
-  .card-remove:hover { color: var(--down); }
-
-  /* badge */
-  .badge-new {
-    display: inline-block; font-size: 10px; font-weight: 700;
-    padding: 2px 8px; border-radius: 99px;
-    background: var(--accent-dim); color: var(--accent);
-    border: 1px solid rgba(232,184,75,0.4);
-    animation: pulse 2s infinite;
-  }
-  .tag {
-    display: inline-block; background: #131a28; color: var(--muted2);
-    font-size: 11px; padding: 2px 9px; border-radius: 99px; margin-top: 6px;
-  }
-
-  /* latest price */
-  .latest-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-  .latest-row { display: flex; justify-content: space-between; align-items: baseline; }
-  .latest-price {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 22px; font-weight: 600;
-  }
-  .latest-date { font-size: 11px; color: var(--muted); }
-  .latest-detail { font-size: 12px; color: var(--muted); margin-top: 3px; }
-
-  /* trend box */
-  .trend-box {
-    background: var(--card2); border-radius: 9px;
-    padding: 10px 13px; margin-top: 13px;
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .trend-label { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
-  .trend-val {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 14px; font-weight: 600;
-  }
-  .up-color { color: var(--up); }
-  .down-color { color: var(--down); }
-  .neu-color { color: var(--muted2); }
-  .blue-color { color: var(--blue); }
-
-  /* empty/loading states */
-  .state-empty {
-    text-align: center; padding: 80px 20px; color: var(--muted);
-    grid-column: 1 / -1;
-  }
-  .state-empty-icon { font-size: 48px; margin-bottom: 16px; }
-  .state-empty-title { font-size: 16px; margin-bottom: 6px; }
-  .state-empty-sub { font-size: 13px; }
-  .card-loading { text-align: center; padding: 28px 0; color: var(--muted); font-size: 13px; }
-  .card-error { color: var(--down); font-size: 12px; text-align: center; padding: 20px 0; }
-
-  /* ── BUTTONS ── */
-  .btn-primary {
-    background: var(--accent); color: #0a0a0a; border: none;
-    padding: 11px 22px; border-radius: 9px;
-    font-size: 14px; font-weight: 700; cursor: pointer;
-    font-family: 'Noto Sans KR', sans-serif;
-    transition: opacity 0.15s, transform 0.1s;
-    width: 100%;
-  }
-  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
-  .btn-primary:active { transform: translateY(0); }
-  .btn-ghost {
-    background: transparent; color: var(--muted2);
-    border: 1px solid var(--border); padding: 9px 16px;
-    border-radius: 8px; font-size: 13px; cursor: pointer;
-    font-family: 'Noto Sans KR', sans-serif;
-    transition: all 0.15s; white-space: nowrap;
-  }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-icon {
-    background: transparent; color: var(--muted);
-    border: 1px solid var(--border); padding: 9px 12px;
-    border-radius: 8px; font-size: 15px; cursor: pointer;
-    transition: all 0.15s;
-  }
-  .btn-icon:hover { border-color: var(--border2); color: var(--text); }
-
-  /* ── FAB ── */
-  #fab {
-    position: fixed; bottom: 28px; right: 24px;
-    width: 54px; height: 54px; border-radius: 50%;
-    background: var(--accent); border: none; font-size: 26px;
-    cursor: pointer; color: #000; display: flex;
-    align-items: center; justify-content: center;
-    box-shadow: 0 4px 24px rgba(232,184,75,0.45);
-    transition: transform 0.15s, box-shadow 0.15s;
-    z-index: 10;
-  }
-  #fab:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(232,184,75,0.6); }
-
-  /* ── INPUTS ── */
-  .form-label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
-  .form-label .req { color: var(--down); }
-  .form-group { margin-bottom: 16px; }
-  input[type=text], input[type=password], select {
-    background: #07090f; border: 1px solid var(--border);
-    color: var(--text); padding: 11px 14px; border-radius: 9px;
-    font-size: 14px; font-family: 'Noto Sans KR', sans-serif;
-    outline: none; transition: border-color 0.15s; width: 100%;
-  }
-  input[type=text]:focus, input[type=password]:focus, select:focus {
-    border-color: var(--accent);
-  }
-  input::placeholder { color: var(--muted); }
-  .input-row { display: flex; gap: 8px; align-items: center; }
-  .input-row input { flex: 1; }
-  .input-sep { color: var(--muted); font-size: 14px; flex-shrink: 0; }
-  .form-hint { font-size: 11px; color: var(--muted); margin-top: 5px; }
-
-  /* ── MODAL ── */
-  .modal-backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 200; padding: 16px; opacity: 0;
-    transition: opacity 0.2s;
-  }
-  .modal-backdrop.show { opacity: 1; }
-  .modal-box {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 18px; width: 100%; max-width: 460px;
-    padding: 28px; animation: fadeUp 0.25s ease;
-  }
-  .modal-head {
-    display: flex; justify-content: space-between;
-    align-items: center; margin-bottom: 24px;
-  }
-  .modal-title { font-size: 18px; font-weight: 700; }
-  .modal-close {
-    background: none; border: none; color: var(--muted);
-    cursor: pointer; font-size: 22px; line-height: 1;
-    transition: color 0.15s;
-  }
-  .modal-close:hover { color: var(--text); }
-
-  /* ── DETAIL SHEET ── */
-  .sheet-backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.8);
-    display: flex; align-items: flex-end; justify-content: center;
-    z-index: 200; opacity: 0; transition: opacity 0.2s;
-  }
-  .sheet-backdrop.show { opacity: 1; }
-  .sheet-box {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 18px 18px 0 0; border-bottom: none;
-    width: 100%; max-width: 640px;
-    max-height: 85vh; display: flex; flex-direction: column;
-    transform: translateY(30px); transition: transform 0.25s ease;
-  }
-  .sheet-backdrop.show .sheet-box { transform: translateY(0); }
-  .sheet-head {
-    padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .sheet-head-top { display: flex; justify-content: space-between; align-items: center; }
-  .sheet-title { font-size: 17px; font-weight: 700; }
-  .sheet-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .sheet-body { overflow-y: auto; flex: 1; padding: 8px 24px 32px; }
-
-  /* tx rows */
-  .tx-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 13px 0; border-bottom: 1px solid var(--border);
-    transition: background 0.1s;
-  }
-  .tx-row:last-child { border-bottom: none; }
-  .tx-date { font-size: 13px; color: var(--muted2); }
-  .tx-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .tx-price {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 16px; font-weight: 600; text-align: right;
-  }
-  .tx-diff {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px; margin-top: 2px; text-align: right;
-  }
-  .tx-no { color: var(--muted); text-align: center; padding: 40px 0; }
-
-  /* ── SPINNER ── */
-  .spinner {
-    display: inline-block; width: 16px; height: 16px;
-    border: 2px solid var(--border2); border-top-color: var(--accent);
-    border-radius: 50%; animation: spin 0.8s linear infinite;
-    vertical-align: middle;
-  }
-  .spinner-sm { width: 12px; height: 12px; }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
-    background: #1a2235; border: 1px solid var(--border2);
-    color: var(--text); padding: 10px 20px; border-radius: 99px;
-    font-size: 13px; z-index: 999; opacity: 0;
-    transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
-  }
-  #toast.show { opacity: 1; }
-
-  /* ── ANIMATIONS ── */
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
-  /* ── REGION SEARCH ── */
-  .region-search { margin-bottom: 6px; }
-  select option { background: #0e1320; }
-
-  /* ── RESPONSIVE ── */
-  @media (max-width: 480px) {
-    .setup-card { padding: 32px 24px; }
-    #dashboard-screen { padding: 16px 12px 80px; }
-    .header-title { font-size: 17px; }
-  }
+  .pyeong-hint{font-size:11px;color:var(--muted);margin-top:8px;}
+  #fab{position:fixed;bottom:28px;right:24px;width:54px;height:54px;border-radius:50%;background:var(--accent);border:none;font-size:26px;cursor:pointer;color:#000;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 24px rgba(232,184,75,.45);transition:transform .15s;z-index:10;}
+  #fab:hover{transform:scale(1.1);}
+  .form-label{font-size:12px;color:var(--muted);display:block;margin-bottom:8px;}
+  .form-label .req{color:var(--down);}
+  .form-group{margin-bottom:18px;}
+  input[type=text],select{background:#07090f;border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:9px;font-size:14px;font-family:'Noto Sans KR',sans-serif;outline:none;transition:border-color .15s;width:100%;}
+  input[type=text]:focus,select:focus{border-color:var(--accent);}
+  input::placeholder{color:var(--muted);}
+  .form-hint{font-size:11px;color:var(--muted);margin-top:5px;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px;opacity:0;transition:opacity .2s;}
+  .modal-backdrop.show{opacity:1;}
+  .modal-box{background:var(--card);border:1px solid var(--border);border-radius:18px;width:100%;max-width:440px;padding:28px;animation:fadeUp .25s ease;}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+  .modal-title{font-size:18px;font-weight:700;}
+  .modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;transition:color .15s;}
+  .modal-close:hover{color:var(--text);}
+  .sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:flex-end;justify-content:center;z-index:200;opacity:0;transition:opacity .2s;}
+  .sheet-backdrop.show{opacity:1;}
+  .sheet-box{background:var(--card);border:1px solid var(--border);border-radius:18px 18px 0 0;border-bottom:none;width:100%;max-width:640px;max-height:85vh;display:flex;flex-direction:column;transform:translateY(30px);transition:transform .25s ease;}
+  .sheet-backdrop.show .sheet-box{transform:translateY(0);}
+  .sheet-head{padding:20px 24px 0;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .sheet-head-top{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;}
+  .sheet-title{font-size:17px;font-weight:700;}
+  .sheet-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+  .sheet-body{overflow-y:auto;flex:1;padding:0 24px 32px;}
+  .detail-tabs{display:flex;gap:8px;padding:12px 0;overflow-x:auto;}
+  .detail-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:5px 14px;border-radius:99px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
+  .detail-tab.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+  .tx-row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--border);}
+  .tx-row:last-child{border-bottom:none;}
+  .tx-date{font-size:13px;color:var(--muted2);}
+  .tx-detail{font-size:12px;color:var(--muted);margin-top:2px;}
+  .tx-price{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;text-align:right;}
+  .tx-diff{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:2px;text-align:right;}
+  .tx-no{color:var(--muted);text-align:center;padding:40px 0;font-size:13px;}
+  .state-empty{text-align:center;padding:80px 20px;color:var(--muted);grid-column:1/-1;}
+  .card-loading{text-align:center;padding:28px 0;color:var(--muted);font-size:13px;}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;}
+  .up-color{color:var(--up);}.down-color{color:var(--down);}.neu-color{color:var(--muted2);}
+  #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1a2235;border:1px solid var(--border2);color:var(--text);padding:10px 20px;border-radius:99px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;}
+  #toast.show{opacity:1;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+  select option{background:#0e1320;}
+  .apt-select-item{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border:1.5px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:all .15s;background:#0a0f1c;}
+  .apt-select-item:hover{border-color:var(--accent);background:var(--accent-dim);}
+  .apt-select-item:last-child{margin-bottom:0;}
+  .apt-select-name{font-size:14px;font-weight:600;}
+  .apt-select-count{font-size:12px;color:var(--muted);}
+  .autocomplete-wrap{position:relative;}
+  .autocomplete-list{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#0e1320;border:1px solid var(--border2);border-radius:10px;z-index:300;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+  .autocomplete-item{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border);}
+  .autocomplete-item:last-child{border-bottom:none;}
+  .autocomplete-item:hover,.autocomplete-item.focused{background:var(--accent-dim);}
+  .autocomplete-item-name{font-size:13px;font-weight:600;color:var(--text);}
+  .autocomplete-item-count{font-size:11px;color:var(--muted);margin-left:8px;flex-shrink:0;}
+  .autocomplete-searching{padding:12px 14px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+  @media(max-width:480px){#dashboard-screen{padding:16px 12px 80px;}.header-title{font-size:17px;}}
 </style>
 </head>
 <body>
-
-<!-- ─── DASHBOARD SCREEN ──────────────────────────────────────── -->
-<div id="dashboard-screen" class="screen active">
+<div id="dashboard-screen">
   <div class="header">
     <div>
       <div class="header-title"><span>실거래가</span> 모니터</div>
       <div class="header-sub" id="last-updated-label">아파트를 추가해서 추적을 시작하세요</div>
     </div>
-    <div class="header-actions">
-      <button class="btn-ghost" id="refresh-btn" onclick="refreshAll()">🔄 새로고침</button>
-
-    </div>
+    <button class="btn-ghost" id="refresh-btn" onclick="refreshAll()">🔄 새로고침</button>
   </div>
-
-  <div class="grid" id="apt-grid">
-    <div class="state-empty">
-      <div class="state-empty-icon">🏠</div>
-      <p class="state-empty-title">추적 중인 아파트가 없어요</p>
-      <p class="state-empty-sub">아래 + 버튼으로 관심 아파트를 추가하세요</p>
-    </div>
-  </div>
+  <div class="grid" id="apt-grid"></div>
 </div>
 
-<!-- ─── FAB ──────────────────────────────────────────────────── -->
-<button id="fab" onclick="openAddModal()" style="display:none">+</button>
+<button id="fab" onclick="openAddModal()">+</button>
 
-<!-- ─── ADD MODAL ─────────────────────────────────────────────── -->
+<!-- ADD MODAL -->
 <div class="modal-backdrop" id="add-modal" onclick="backdropClose(event,'add-modal')">
   <div class="modal-box">
     <div class="modal-head">
       <span class="modal-title">아파트 추가</span>
       <button class="modal-close" onclick="closeModal('add-modal')">×</button>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">지역 검색</label>
-      <input type="text" id="region-search" class="region-search" placeholder="예: 강남, 분당, 해운대"
-        oninput="filterRegions()">
     </div>
     <div class="form-group">
       <label class="form-label">시군구 선택 <span class="req">*</span></label>
@@ -366,25 +148,43 @@
     </div>
     <div class="form-group">
       <label class="form-label">아파트 이름 <span class="req">*</span></label>
-      <input type="text" id="apt-name-input" placeholder="예: 래미안대치팰리스, 헬리오시티"
-        onkeydown="if(event.key==='Enter') addApartment()">
-      <p class="form-hint">정확한 이름 일부만 입력해도 검색됩니다</p>
+      <div class="autocomplete-wrap">
+        <input type="text" id="apt-name-input" placeholder="먼저 시군구를 선택해주세요"
+          oninput="onAptNameInput(this.value)"
+          onkeydown="onAptNameKeydown(event)"
+          autocomplete="off" disabled
+          style="opacity:0.4;cursor:not-allowed;">
+        <div class="autocomplete-list" id="autocomplete-list" style="display:none"></div>
+      </div>
+      <p class="form-hint" id="apt-name-hint">지역 선택 후 이름을 입력하면 자동검색됩니다</p>
     </div>
     <div class="form-group">
-      <label class="form-label">전용면적 필터 ㎡ (선택)</label>
-      <div class="input-row">
-        <input type="text" id="min-area" placeholder="최소 (예: 59)">
-        <span class="input-sep">~</span>
-        <input type="text" id="max-area" placeholder="최대 (예: 85)">
+      <label class="form-label">평형 선택 <span class="req">*</span> <span style="color:var(--muted);font-weight:400">(최대 2개)</span></label>
+      <div class="pyeong-btns">
+        <button class="pyeong-btn" data-key="10" onclick="togglePyeong(this)">10평대</button>
+        <button class="pyeong-btn" data-key="20" onclick="togglePyeong(this)">20~30평</button>
+        <button class="pyeong-btn" data-key="40" onclick="togglePyeong(this)">40평대</button>
+        <button class="pyeong-btn" data-key="50" onclick="togglePyeong(this)">50평이상</button>
       </div>
-      <p class="form-hint">비워두면 전체 면적 조회</p>
+      <p class="pyeong-hint" id="pyeong-hint">1개 이상 선택해주세요</p>
     </div>
-
     <button class="btn-primary" onclick="addApartment()">추가하기</button>
   </div>
 </div>
 
-<!-- ─── DETAIL SHEET ───────────────────────────────────────────── -->
+<!-- APT SELECT MODAL -->
+<div class="modal-backdrop" id="select-modal" onclick="backdropClose(event,'select-modal')">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="modal-title">아파트 선택</span>
+      <button class="modal-close" onclick="closeModal('select-modal')">×</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted2);margin-bottom:16px">검색된 아파트 목록이에요. 등록할 아파트를 선택해주세요.</p>
+    <div id="apt-select-list"></div>
+  </div>
+</div>
+
+<!-- DETAIL SHEET -->
 <div class="sheet-backdrop" id="detail-sheet" onclick="backdropClose(event,'detail-sheet')">
   <div class="sheet-box">
     <div class="sheet-head">
@@ -395,510 +195,450 @@
         </div>
         <button class="modal-close" onclick="closeModal('detail-sheet')">×</button>
       </div>
+      <div class="detail-tabs" id="detail-tabs"></div>
     </div>
     <div class="sheet-body" id="sheet-body"></div>
   </div>
 </div>
 
-<!-- ─── TOAST ─────────────────────────────────────────────────── -->
 <div id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════
-//  데이터
-// ═══════════════════════════════════════════════════════════════
+const PYEONG_DEFS = {
+  '10':{label:'10평대', minM2:0,   maxM2:66},
+  '20':{label:'20~30평',minM2:66,  maxM2:99},
+  '40':{label:'40평대', minM2:99,  maxM2:132},
+  '50':{label:'50평이상',minM2:132,maxM2:9999},
+};
+
 const REGIONS = [
-  {code:"11110",name:"서울 종로구"},{code:"11140",name:"서울 중구"},
-  {code:"11170",name:"서울 용산구"},{code:"11200",name:"서울 성동구"},
-  {code:"11215",name:"서울 광진구"},{code:"11230",name:"서울 동대문구"},
-  {code:"11260",name:"서울 중랑구"},{code:"11290",name:"서울 성북구"},
-  {code:"11305",name:"서울 강북구"},{code:"11320",name:"서울 도봉구"},
-  {code:"11350",name:"서울 노원구"},{code:"11380",name:"서울 은평구"},
-  {code:"11410",name:"서울 서대문구"},{code:"11440",name:"서울 마포구"},
-  {code:"11470",name:"서울 양천구"},{code:"11500",name:"서울 강서구"},
-  {code:"11530",name:"서울 구로구"},{code:"11545",name:"서울 금천구"},
-  {code:"11560",name:"서울 영등포구"},{code:"11590",name:"서울 동작구"},
-  {code:"11620",name:"서울 관악구"},{code:"11650",name:"서울 서초구"},
-  {code:"11680",name:"서울 강남구"},{code:"11710",name:"서울 송파구"},
-  {code:"11740",name:"서울 강동구"},
-  {code:"41135",name:"경기 성남 분당구"},{code:"41131",name:"경기 성남 수정구"},
-  {code:"41133",name:"경기 성남 중원구"},{code:"41117",name:"경기 수원 영통구"},
-  {code:"41115",name:"경기 수원 팔달구"},{code:"41113",name:"경기 수원 권선구"},
-  {code:"41465",name:"경기 용인 수지구"},{code:"41463",name:"경기 용인 기흥구"},
-  {code:"41461",name:"경기 용인 처인구"},{code:"41285",name:"경기 고양 일산동구"},
-  {code:"41287",name:"경기 고양 일산서구"},{code:"41281",name:"경기 고양 덕양구"},
-  {code:"41290",name:"경기 과천시"},{code:"41173",name:"경기 안양 동안구"},
-  {code:"41171",name:"경기 안양 만안구"},{code:"41460",name:"경기 하남시"},
-  {code:"41590",name:"경기 화성시"},{code:"41360",name:"경기 남양주시"},
-  {code:"41570",name:"경기 김포시"},{code:"41310",name:"경기 구리시"},
-  {code:"41430",name:"경기 군포시"},{code:"41450",name:"경기 의왕시"},
-  {code:"28185",name:"인천 연수구"},{code:"28200",name:"인천 남동구"},
-  {code:"28237",name:"인천 부평구"},{code:"28245",name:"인천 계양구"},
-  {code:"28260",name:"인천 서구"},{code:"28177",name:"인천 미추홀구"},
-  {code:"26350",name:"부산 해운대구"},{code:"26260",name:"부산 동래구"},
-  {code:"26290",name:"부산 남구"},{code:"26500",name:"부산 수영구"},
-  {code:"26230",name:"부산 부산진구"},{code:"26410",name:"부산 금정구"},
-  {code:"27260",name:"대구 수성구"},{code:"27290",name:"대구 달서구"},
-  {code:"27230",name:"대구 북구"},{code:"27140",name:"대구 동구"},
-  {code:"29110",name:"광주 북구"},{code:"29155",name:"광주 광산구"},
-  {code:"30110",name:"대전 서구"},{code:"30170",name:"대전 유성구"},
-  {code:"36110",name:"세종특별자치시"},
+  {code:"11110",name:"서울 종로구"},{code:"11140",name:"서울 중구"},{code:"11170",name:"서울 용산구"},
+  {code:"11200",name:"서울 성동구"},{code:"11215",name:"서울 광진구"},{code:"11230",name:"서울 동대문구"},
+  {code:"11260",name:"서울 중랑구"},{code:"11290",name:"서울 성북구"},{code:"11305",name:"서울 강북구"},
+  {code:"11320",name:"서울 도봉구"},{code:"11350",name:"서울 노원구"},{code:"11380",name:"서울 은평구"},
+  {code:"11410",name:"서울 서대문구"},{code:"11440",name:"서울 마포구"},{code:"11470",name:"서울 양천구"},
+  {code:"11500",name:"서울 강서구"},{code:"11530",name:"서울 구로구"},{code:"11545",name:"서울 금천구"},
+  {code:"11560",name:"서울 영등포구"},{code:"11590",name:"서울 동작구"},{code:"11620",name:"서울 관악구"},
+  {code:"11650",name:"서울 서초구"},{code:"11680",name:"서울 강남구"},{code:"11710",name:"서울 송파구"},
+  {code:"11740",name:"서울 강동구"},{code:"41135",name:"경기 성남 분당구"},{code:"41131",name:"경기 성남 수정구"},
+  {code:"41133",name:"경기 성남 중원구"},{code:"41117",name:"경기 수원 영통구"},{code:"41115",name:"경기 수원 팔달구"},
+  {code:"41113",name:"경기 수원 권선구"},{code:"41465",name:"경기 용인 수지구"},{code:"41463",name:"경기 용인 기흥구"},
+  {code:"41461",name:"경기 용인 처인구"},{code:"41285",name:"경기 고양 일산동구"},{code:"41287",name:"경기 고양 일산서구"},
+  {code:"41281",name:"경기 고양 덕양구"},{code:"41290",name:"경기 과천시"},{code:"41173",name:"경기 안양 동안구"},
+  {code:"41171",name:"경기 안양 만안구"},{code:"41460",name:"경기 하남시"},{code:"41590",name:"경기 화성시"},
+  {code:"41360",name:"경기 남양주시"},{code:"41570",name:"경기 김포시"},{code:"41310",name:"경기 구리시"},
+  {code:"41430",name:"경기 군포시"},{code:"41450",name:"경기 의왕시"},{code:"28185",name:"인천 연수구"},
+  {code:"28200",name:"인천 남동구"},{code:"28237",name:"인천 부평구"},{code:"28245",name:"인천 계양구"},
+  {code:"28260",name:"인천 서구"},{code:"28177",name:"인천 미추홀구"},{code:"26350",name:"부산 해운대구"},
+  {code:"26260",name:"부산 동래구"},{code:"26290",name:"부산 남구"},{code:"26500",name:"부산 수영구"},
+  {code:"26230",name:"부산 부산진구"},{code:"26410",name:"부산 금정구"},{code:"27260",name:"대구 수성구"},
+  {code:"27290",name:"대구 달서구"},{code:"27230",name:"대구 북구"},{code:"27140",name:"대구 동구"},
+  {code:"29110",name:"광주 북구"},{code:"29155",name:"광주 광산구"},{code:"30110",name:"대전 서구"},
+  {code:"30170",name:"대전 유성구"},{code:"36110",name:"세종특별자치시"},
 ];
 
-// ═══════════════════════════════════════════════════════════════
-//  상태
-// ═══════════════════════════════════════════════════════════════
-let apiKey = '';
-let apartments = [];   // [{id, lawdCd, regionName, aptName, minArea, maxArea}]
-let transactions = {}; // aptId → [{...tx}]
-let newCounts = {};    // aptId → number
-let lastSeen = {};     // aptId → Set of tx ids
-let isRefreshing = false;
+const API_KEY = '11dd61957e19e1f4fd453a52a0fd3b35e83ec8696dc1d39030ac588e8c41b53b';
+let apartments=[], transactions={}, newCounts={}, lastSeen={}, isRefreshing=false, selectedPyeongs=[];
+let detailAptId=null, detailActivePyeong=null;
 
-// ═══════════════════════════════════════════════════════════════
-//  로컬스토리지
-// ═══════════════════════════════════════════════════════════════
-function load() {
-  apiKey = localStorage.getItem('apt_apikey') || '';
-  apartments = JSON.parse(localStorage.getItem('apt_list') || '[]');
-  const seenRaw = JSON.parse(localStorage.getItem('apt_lastseen') || '{}');
-  lastSeen = {};
-  for (const k in seenRaw) lastSeen[k] = new Set(seenRaw[k]);
+function loadStorage(){
+  apartments=JSON.parse(localStorage.getItem('apt_list2')||'[]');
+  const raw=JSON.parse(localStorage.getItem('apt_seen2')||'{}');
+  lastSeen={};
+  for(const k in raw) lastSeen[k]=new Set(raw[k]);
 }
-function saveApts() {
-  localStorage.setItem('apt_list', JSON.stringify(apartments));
+function saveApts(){localStorage.setItem('apt_list2',JSON.stringify(apartments));}
+function saveSeen(){
+  const raw={};
+  for(const k in lastSeen) raw[k]=[...lastSeen[k]];
+  localStorage.setItem('apt_seen2',JSON.stringify(raw));
 }
-function saveSeen() {
-  const raw = {};
-  for (const k in lastSeen) raw[k] = [...lastSeen[k]];
-  localStorage.setItem('apt_lastseen', JSON.stringify(raw));
+function getLastNMonths(n){
+  const r=[];const now=new Date();
+  for(let i=0;i<n;i++){const d=new Date(now.getFullYear(),now.getMonth()-i,1);r.push(`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`);}
+  return r;
+}
+function formatPrice(v){
+  if(!v)return'-';const e=Math.floor(v/10000),m=v%10000;
+  if(e>0&&m>0)return `${e}억 ${m.toLocaleString()}만`;
+  if(e>0)return `${e}억`;return `${v.toLocaleString()}만`;
+}
+function pyeongStr(m2){return `${(m2/3.3058).toFixed(0)}평`;}
+function toast(msg,d=2500){
+  const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),d);
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  유틸
-// ═══════════════════════════════════════════════════════════════
-function getLastNMonths(n) {
-  const result = [];
-  const now = new Date();
-  for (let i = 0; i < n; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    result.push(`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`);
+async function fetchMonthData(lawdCd,dealYmd){
+  const res=await fetch(`/proxy?LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}`);
+  if(!res.ok) throw new Error(`서버 오류 ${res.status}`);
+  return parseXML(await res.text());
+}
+function parseXML(xmlStr){
+  const doc=new DOMParser().parseFromString(xmlStr,'text/xml');
+  const code=doc.querySelector('resultCode')?.textContent?.trim();
+  if(code&&code!=='000'&&code!=='00'){
+    throw new Error(`API 오류(${code}): ${doc.querySelector('resultMsg')?.textContent?.trim()||'오류'}`);
+  }
+  const items=doc.querySelectorAll('item');
+  if(!items.length) return [];
+  return Array.from(items).map(item=>{
+    const g=tag=>item.getElementsByTagName(tag)[0]?.textContent?.trim()||'';
+    const price=parseInt(g('dealAmount').replace(/,/g,'').replace(/\s/g,''))||0;
+    const yr=g('dealYear'),mo=g('dealMonth').padStart(2,'0'),dy=g('dealDay').padStart(2,'0');
+    return{aptName:g('aptNm'),area:parseFloat(g('excluUseAr'))||0,floor:g('floor'),price,year:yr,month:mo,day:dy,
+      cancelled:g('cdealType').trim(),id:`${g('aptNm')}_${yr}${mo}${dy}_F${g('floor')}_${g('excluUseAr')}`};
+  }).filter(t=>t.cancelled!=='해제'&&t.price>0&&t.aptName);
+}
+async function fetchApt(apt){
+  const months=getLastNMonths(3);const all=[];
+  for(const ym of months){const txs=await fetchMonthData(apt.lawdCd,ym);all.push(...txs);}
+  const matched=all.filter(tx=>tx.aptName.includes(apt.aptName));
+  const result={};
+  for(const p of apt.pyeongs){
+    const def=PYEONG_DEFS[p];
+    result[p]=matched.filter(tx=>tx.area>=def.minM2&&tx.area<def.maxM2)
+      .sort((a,b)=>`${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
   }
   return result;
 }
-
-function formatPrice(manwon) {
-  if (!manwon) return '-';
-  const eok = Math.floor(manwon / 10000);
-  const man = manwon % 10000;
-  if (eok > 0 && man > 0) return `${eok}억 ${man.toLocaleString()}만`;
-  if (eok > 0) return `${eok}억`;
-  return `${manwon.toLocaleString()}만`;
+function calcStats(txs){
+  if(!txs||!txs.length) return null;
+  const latest=txs[0];
+  const minPrice=Math.min(...txs.map(t=>t.price));
+  const prev=txs[1];
+  const change=prev?((latest.price-prev.price)/prev.price*100):null;
+  return{latest,minPrice,change,count:txs.length};
 }
 
-function formatArea(m2) {
-  return `${parseFloat(m2).toFixed(0)}㎡ (${(m2/3.3058).toFixed(0)}평)`;
-}
-
-function toast(msg, duration = 2500) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), duration);
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  API 호출
-// ═══════════════════════════════════════════════════════════════
-async function fetchMonthData(lawdCd, dealYmd) {
-  // 로컬 서버(server.py)를 통해 API 호출 - CORS 문제 없음
-  const url = `/proxy?LAWD_CD=${lawdCd}&DEAL_YMD=${dealYmd}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
-  const xml = await res.text();
-  return parseXML(xml);
-}
-
-function parseXML(xmlStr) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlStr, 'text/xml');
-
-  // API 오류 체크
-  const resultCode = doc.querySelector('resultCode');
-  if (resultCode) {
-    const code = resultCode.textContent.trim();
-    if (code && code !== '000' && code !== '00') {
-      const msg = doc.querySelector('resultMsg')?.textContent?.trim() || '알 수 없는 오류';
-      throw new Error(`API 오류 (${code}): ${msg}`);
-    }
+async function refreshAll(){
+  if(isRefreshing||!apartments.length) return;
+  isRefreshing=true;
+  const btn=document.getElementById('refresh-btn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:12px;height:12px;border-width:2px"></span> 조회중...';
+  for(const apt of apartments){
+    try{
+      const txMap=await fetchApt(apt);
+      transactions[apt.id]=txMap;
+      const seen=lastSeen[apt.id]||new Set();
+      const allTxs=Object.values(txMap).flat();
+      newCounts[apt.id]=allTxs.filter(tx=>!seen.has(tx.id)).length;
+      lastSeen[apt.id]=new Set(allTxs.map(t=>t.id));
+    }catch(e){console.error(apt.aptName,e);toast(`⚠ ${apt.aptName}: ${e.message}`,5000);}
   }
-
-  const items = doc.querySelectorAll('item');
-  if (!items.length) return [];
-  return Array.from(items).map(item => {
-    const get = tag => item.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
-    const priceRaw = get('dealAmount').replace(/,/g,'').replace(/\s/g,'');
-    const price = parseInt(priceRaw) || 0;
-    const yr = get('dealYear'), mo = get('dealMonth').padStart(2,'0'), dy = get('dealDay').padStart(2,'0');
-    const cancelled = get('cdealType').trim();
-    return {
-      aptName: get('aptNm'), area: parseFloat(get('excluUseAr')) || 0,
-      floor: get('floor'), price, year: yr, month: mo, day: dy,
-      buildYear: get('buildYear'), dong: get('umdNm'),
-      cancelled,
-      id: `${get('aptNm')}_${yr}${mo}${dy}_F${get('floor')}_${get('excluUseAr')}`,
-    };
-  }).filter(t => t.cancelled !== '해제' && t.price > 0 && t.aptName);
-}
-
-async function fetchApt(apt) {
-  const months = getLastNMonths(3);
-  const all = [];
-  for (const ym of months) {
-    const txs = await fetchMonthData(apt.lawdCd, ym);
-    console.log(`[${apt.aptName}] ${ym} → 전체 ${txs.length}건`);
-    if (txs.length > 0) {
-      console.log(`[${apt.aptName}] 아파트명 샘플:`, [...new Set(txs.map(t => t.aptName))].slice(0, 10));
-    }
-    all.push(...txs);
-  }
-  const filtered = all.filter(tx =>
-    tx.aptName.includes(apt.aptName) &&
-    (!apt.minArea || tx.area >= apt.minArea) &&
-    (!apt.maxArea || tx.area <= apt.maxArea)
-  );
-  console.log(`[${apt.aptName}] 필터 후 ${filtered.length}건`);
-  return filtered.sort((a,b) => `${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  통계
-// ═══════════════════════════════════════════════════════════════
-function calcStats(txs) {
-  if (!txs || !txs.length) return null;
-  const now = new Date();
-  const thisYm = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
-  const prevD = new Date(now.getFullYear(), now.getMonth()-1, 1);
-  const prevYm = `${prevD.getFullYear()}${String(prevD.getMonth()+1).padStart(2,'0')}`;
-  const thisM = txs.filter(t => `${t.year}${t.month}` === thisYm);
-  const prevM = txs.filter(t => `${t.year}${t.month}` === prevYm);
-  const avg = arr => arr.length ? Math.round(arr.reduce((s,t)=>s+t.price,0)/arr.length) : 0;
-  const thisAvg = avg(thisM), prevAvg = avg(prevM);
-  const diff = (thisM.length && prevM.length) ? thisAvg - prevAvg : null;
-  return { latest: txs[0], thisAvg, prevAvg, diff, thisCount: thisM.length };
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  화면 전환
-// ═══════════════════════════════════════════════════════════════
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  document.getElementById('fab').style.display = id === 'dashboard-screen' ? 'flex' : 'none';
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  API 키 설정
-// ═══════════════════════════════════════════════════════════════
-function saveApiKey() {
-  const val = document.getElementById('api-key-input').value.trim();
-  if (!val) { toast('⚠ API 키를 입력해주세요'); return; }
-  apiKey = val;
-  localStorage.setItem('apt_apikey', apiKey);
-  showScreen('dashboard-screen');
-  renderGrid();
-  if (apartments.length > 0) refreshAll();
-}
-
-function resetSetup() {
-  if (!confirm('API 키를 재설정하시겠습니까?')) return;
-  localStorage.removeItem('apt_apikey');
-  apiKey = '';
-  showScreen('setup-screen');
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  그리드 렌더링
-// ═══════════════════════════════════════════════════════════════
-function renderGrid() {
-  const grid = document.getElementById('apt-grid');
-  if (apartments.length === 0) {
-    grid.innerHTML = `
-      <div class="state-empty">
-        <div class="state-empty-icon">🏠</div>
-        <p class="state-empty-title">추적 중인 아파트가 없어요</p>
-        <p class="state-empty-sub">+ 버튼으로 관심 아파트를 추가하세요</p>
-      </div>`;
-    return;
-  }
-  grid.innerHTML = apartments.map((apt, i) =>
-    renderCard(apt, i)
-  ).join('');
-}
-
-function renderCard(apt, delay = 0) {
-  const txs = transactions[apt.id] || null;
-  const newCnt = newCounts[apt.id] || 0;
-  const stats = txs ? calcStats(txs) : null;
-  const isLoading = !txs;
-
-  const badge = newCnt > 0 ? `<span class="badge-new">NEW +${newCnt}</span>` : '';
-  const tag = (apt.minArea || apt.maxArea)
-    ? `<span class="tag">${apt.minArea||''}㎡ ~ ${apt.maxArea||''}㎡</span>` : '';
-
-  let body = '';
-  if (isLoading) {
-    body = `<div class="card-loading"><span class="spinner"></span><br><br>조회중...</div>`;
-  } else if (txs.length === 0) {
-    body = `<div class="card-loading" style="color:var(--muted)">거래 내역 없음</div>`;
-  } else if (!stats) {
-    body = `<div class="card-loading" style="color:var(--muted)">데이터 없음</div>`;
-  } else {
-    const trendHtml = stats.diff !== null ? `
-      <div class="trend-box">
-        <div>
-          <div class="trend-label">전월 대비 평균</div>
-          <div class="trend-val ${stats.diff > 0 ? 'down-color' : stats.diff < 0 ? 'up-color' : 'neu-color'}">
-            ${stats.diff > 0 ? '▲' : stats.diff < 0 ? '▼' : '─'} ${formatPrice(Math.abs(stats.diff))}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div class="trend-label">이번달 건수</div>
-          <div class="trend-val blue-color">${stats.thisCount}건</div>
-        </div>
-      </div>` : '';
-
-    body = `
-      <div class="latest-label">최근 거래</div>
-      <div class="latest-row">
-        <span class="latest-price">${formatPrice(stats.latest.price)}</span>
-        <span class="latest-date">${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</span>
-      </div>
-      <div class="latest-detail">${formatArea(stats.latest.area)} · ${stats.latest.floor}층</div>
-      ${trendHtml}
-    `;
-  }
-
-  return `
-    <div class="apt-card" style="animation-delay:${delay*0.05}s"
-      onclick="openDetail('${apt.id}')">
-      <div class="card-head">
-        <div class="card-head-top">
-          <div style="flex:1;min-width:0">
-            <div style="min-height:18px">${badge}</div>
-            <div class="card-apt-name">${apt.aptName}</div>
-            <div class="card-region">${apt.regionName}</div>
-          </div>
-          <button class="card-remove" onclick="event.stopPropagation();removeApt('${apt.id}')" title="삭제">×</button>
-        </div>
-        ${tag}
-      </div>
-      <div class="card-body">${body}</div>
-    </div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  새로고침
-// ═══════════════════════════════════════════════════════════════
-async function refreshAll() {
-  if (isRefreshing || apartments.length === 0) return;
-  isRefreshing = true;
-  const btn = document.getElementById('refresh-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner spinner-sm"></span> 조회중...';
-
-  for (const apt of apartments) {
-    try {
-      const txs = await fetchApt(apt);
-      transactions[apt.id] = txs;
-      const seen = lastSeen[apt.id] || new Set();
-      const newOnes = txs.filter(tx => !seen.has(tx.id));
-      newCounts[apt.id] = newOnes.length;
-      lastSeen[apt.id] = new Set(txs.map(t => t.id));
-    } catch(e) {
-      console.error(apt.aptName, e);
-      transactions[apt.id] = [];
-      newCounts[apt.id] = 0;
-      toast(`⚠ ${apt.aptName}: ${e.message}`, 5000);
-    }
-  }
-
   saveSeen();
-  const now = new Date();
-  document.getElementById('last-updated-label').textContent =
-    `마지막 조회: ${now.toLocaleTimeString('ko-KR')}`;
-  renderGrid();
-  isRefreshing = false;
-  btn.disabled = false;
-  btn.innerHTML = '🔄 새로고침';
+  document.getElementById('last-updated-label').textContent=`마지막 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
+  renderGrid();isRefreshing=false;btn.disabled=false;btn.innerHTML='🔄 새로고침';
   toast('✅ 조회 완료!');
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  아파트 추가/삭제
-// ═══════════════════════════════════════════════════════════════
-function openAddModal() {
-  populateRegions('');
-  document.getElementById('apt-name-input').value = '';
-  document.getElementById('min-area').value = '';
-  document.getElementById('max-area').value = '';
-  document.getElementById('region-search').value = '';
-  openModal('add-modal');
-}
-
-async function addApartment() {
-  const regionSel = document.getElementById('region-select');
-  const name = document.getElementById('apt-name-input').value.trim();
-  const minArea = document.getElementById('min-area').value;
-  const maxArea = document.getElementById('max-area').value;
-
-  if (!name) { toast('⚠ 아파트 이름을 입력해주세요'); return; }
-  const region = REGIONS.find(r => r.code === regionSel.value);
-  if (!region) { toast('⚠ 지역을 선택해주세요'); return; }
-
-  const apt = {
-    id: `${region.code}_${Date.now()}`,
-    lawdCd: region.code, regionName: region.name, aptName: name,
-    minArea: minArea ? parseFloat(minArea) : null,
-    maxArea: maxArea ? parseFloat(maxArea) : null,
-  };
-  apartments.push(apt);
-  saveApts();
-  closeModal('add-modal');
-  renderGrid();
-
-  // 즉시 조회
-  try {
-    const txs = await fetchApt(apt);
-    transactions[apt.id] = txs;
-    const newOnes = txs.filter(tx => !(lastSeen[apt.id] || new Set()).has(tx.id));
-    newCounts[apt.id] = newOnes.length;
-    lastSeen[apt.id] = new Set(txs.map(t => t.id));
-    saveSeen();
-    document.getElementById('last-updated-label').textContent =
-      `마지막 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
-    renderGrid();
-    toast(`✅ ${name} 추가 완료! (${txs.length}건)`);
-  } catch(e) {
-    toast(`⚠ 조회 실패: ${e.message}`);
-    transactions[apt.id] = [];
-    renderGrid();
+function renderGrid(){
+  const grid=document.getElementById('apt-grid');
+  if(!apartments.length){
+    grid.innerHTML=`<div class="state-empty"><div style="font-size:48px;margin-bottom:16px">🏠</div><p style="font-size:16px;margin-bottom:6px">추적 중인 아파트가 없어요</p><p style="font-size:13px">+ 버튼으로 추가하세요</p></div>`;
+    return;
   }
+  grid.innerHTML=apartments.map((apt,i)=>renderCard(apt,i)).join('');
 }
-
-function removeApt(aptId) {
-  const apt = apartments.find(a => a.id === aptId);
-  apartments = apartments.filter(a => a.id !== aptId);
-  delete transactions[aptId];
-  delete newCounts[aptId];
-  saveApts();
-  renderGrid();
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  상세 시트
-// ═══════════════════════════════════════════════════════════════
-function openDetail(aptId) {
-  const apt = apartments.find(a => a.id === aptId);
-  if (!apt) return;
-
-  // mark read
-  if ((newCounts[aptId] || 0) > 0) {
-    newCounts[aptId] = 0;
-    if (transactions[aptId]) {
-      lastSeen[aptId] = new Set(transactions[aptId].map(t => t.id));
-      saveSeen();
-    }
-    renderGrid();
-  }
-
-  document.getElementById('sheet-title').textContent = apt.aptName;
-  document.getElementById('sheet-sub').textContent =
-    `${apt.regionName} · 최근 3개월 실거래`;
-
-  const txs = transactions[aptId] || [];
-  const body = document.getElementById('sheet-body');
-  if (txs.length === 0) {
-    body.innerHTML = '<div class="tx-no">조회된 거래 내역이 없습니다</div>';
-  } else {
-    body.innerHTML = txs.map((tx, i) => {
-      const prev = txs[i+1];
-      const diff = prev ? tx.price - prev.price : null;
-      const diffHtml = diff !== null
-        ? `<div class="tx-diff ${diff>0?'down-color':diff<0?'up-color':'neu-color'}">
-            ${diff>0?'▲':diff<0?'▼':'─'} ${formatPrice(Math.abs(diff))}
-           </div>` : '';
-      return `
-        <div class="tx-row">
-          <div>
-            <div class="tx-date">${tx.year}.${tx.month}.${tx.day} · ${tx.floor}층</div>
-            <div class="tx-detail">${formatArea(tx.area)}</div>
-          </div>
-          <div>
-            <div class="tx-price">${formatPrice(tx.price)}</div>
-            ${diffHtml}
-          </div>
-        </div>`;
+function renderCard(apt,delay=0){
+  const txMap=transactions[apt.id];
+  const newCnt=newCounts[apt.id]||0;
+  const badge=newCnt>0?`<span class="badge-new">NEW +${newCnt}</span>`:'';
+  const ptags=apt.pyeongs.map(p=>`<span class="pyeong-tag">${PYEONG_DEFS[p].label}</span>`).join('');
+  let body='';
+  if(!txMap){
+    body=`<div class="card-loading"><span class="spinner"></span><br><br>조회중...</div>`;
+  }else{
+    body=apt.pyeongs.map(p=>{
+      const txs=txMap[p]||[];const stats=calcStats(txs);
+      if(!stats) return `<div class="pyeong-section"><div class="pyeong-label">${PYEONG_DEFS[p].label}</div><div class="no-data">거래 내역 없음</div></div>`;
+      const cc=stats.change===null?'neu-color':stats.change>0?'down-color':'up-color';
+      const cs=stats.change===null?'-':`${stats.change>0?'▲':'▼'} ${Math.abs(stats.change).toFixed(1)}%`;
+      return `<div class="pyeong-section">
+        <div class="pyeong-label">${PYEONG_DEFS[p].label} <span style="font-size:10px;color:var(--muted);font-weight:400">3개월 ${stats.count}건</span></div>
+        <div class="latest-price">${formatPrice(stats.latest.price)}</div>
+        <div class="latest-meta">${pyeongStr(stats.latest.area)} · ${stats.latest.floor}층 · ${stats.latest.year}.${stats.latest.month}.${stats.latest.day}</div>
+        <div class="stat-box">
+          <div class="stat-item"><div class="stat-label">3개월 최저가</div><div class="stat-val up-color">${formatPrice(stats.minPrice)}</div></div>
+          <div class="stat-item"><div class="stat-label">직전 대비</div><div class="stat-val ${cc}">${cs}</div></div>
+        </div></div>`;
     }).join('');
   }
+  return `<div class="apt-card" style="animation-delay:${delay*.05}s" onclick="openDetail('${apt.id}')">
+    <div class="card-head">
+      <div class="card-head-top">
+        <div style="flex:1;min-width:0"><div style="min-height:18px">${badge}</div>
+          <div class="card-apt-name">${apt.aptName}</div>
+          <div class="card-region">${apt.regionName}</div></div>
+        <button class="card-remove" onclick="event.stopPropagation();removeApt('${apt.id}')">×</button>
+      </div>
+      <div class="pyeong-tags">${ptags}</div>
+    </div>
+    <div class="card-body">${body}</div></div>`;
+}
 
+function togglePyeong(btn){
+  const p=btn.dataset.key;
+  const isActive=btn.classList.contains('active');
+  // 비활성 버튼인데 이미 2개 선택된 경우 → 무시
+  if(!isActive && selectedPyeongs.length>=2) return;
+  if(isActive){
+    btn.classList.remove('active');
+    selectedPyeongs=selectedPyeongs.filter(x=>x!==p);
+  } else {
+    btn.classList.add('active');
+    selectedPyeongs.push(p);
+  }
+  // 2개 선택 시 비선택 버튼만 시각적으로 흐리게 (disabled 속성 사용 안 함)
+  const full=selectedPyeongs.length>=2;
+  document.querySelectorAll('.pyeong-btn').forEach(b=>{
+    const inactive=!b.classList.contains('active');
+    b.style.opacity = (full && inactive) ? '0.3' : '1';
+    b.style.cursor  = (full && inactive) ? 'not-allowed' : 'pointer';
+    b.style.pointerEvents = (full && inactive) ? 'none' : 'auto';
+  });
+  const hint=document.getElementById('pyeong-hint');
+  hint.textContent=selectedPyeongs.length?selectedPyeongs.map(p=>PYEONG_DEFS[p].label).join(', ')+' 선택됨':'1개 이상 선택해주세요';
+  hint.style.color=selectedPyeongs.length?'var(--accent)':'var(--muted)';
+}
+
+function openAddModal(){
+  const inp=document.getElementById('apt-name-input');
+  inp.value='';inp.disabled=true;inp.style.opacity='0.4';
+  inp.style.cursor='not-allowed';inp.placeholder='먼저 시군구를 선택해주세요';
+  document.getElementById('autocomplete-list').style.display='none';
+  document.getElementById('apt-name-hint').textContent='지역 선택 후 이름을 입력하면 자동검색됩니다';
+  document.getElementById('apt-name-hint').style.color='var(--muted)';
+  acResults=[];acFocusIdx=-1;clearTimeout(acTimer);
+  selectedPyeongs=[];
+  document.querySelectorAll('.pyeong-btn').forEach(b=>{
+    b.classList.remove('active');
+    b.style.opacity='1';b.style.cursor='pointer';b.style.pointerEvents='auto';
+  });
+  document.getElementById('pyeong-hint').textContent='1개 이상 선택해주세요';
+  document.getElementById('pyeong-hint').style.color='var(--muted)';
+  openModal('add-modal');
+}
+// 검색 임시 저장
+let pendingSearch = null;
+
+// 자동완성 상태
+let acCache = {};      // regionCode → 전체 tx 캐시
+let acTimer = null;
+let acFocusIdx = -1;
+let acResults = [];    // [{name, count}]
+
+async function onAptNameInput(val) {
+  const hint = document.getElementById('apt-name-hint');
+  const list = document.getElementById('autocomplete-list');
+  clearTimeout(acTimer);
+  acFocusIdx = -1;
+
+  if (!val.trim()) {
+    list.style.display = 'none';
+    hint.textContent = '지역 선택 후 이름을 입력하면 자동검색됩니다';
+    hint.style.color = 'var(--muted)';
+    return;
+  }
+  if (val.trim().length < 2) {
+    list.style.display = 'none';
+    hint.textContent = '한 글자 더 입력해주세요';
+    hint.style.color = 'var(--muted)';
+    return;
+  }
+
+  const regionCode = document.getElementById('region-select').value;
+
+  // 로딩 표시
+  list.style.display = 'block';
+  list.innerHTML = `<div class="autocomplete-searching"><span class="spinner" style="width:12px;height:12px;border-width:2px"></span> 검색중...</div>`;
+
+  acTimer = setTimeout(async () => {
+    try {
+      // 캐시 없으면 API 조회 (3개월치)
+      if (!acCache[regionCode]) {
+        const months = getLastNMonths(3);
+        const all = [];
+        for (const ym of months) {
+          const txs = await fetchMonthData(regionCode, ym);
+          all.push(...txs);
+        }
+        acCache[regionCode] = all;
+      }
+
+      const allTxs = acCache[regionCode];
+      const keyword = val.trim();
+
+      // 매칭 아파트명 + 건수 집계
+      const nameMap = {};
+      allTxs.filter(tx => tx.aptName.includes(keyword)).forEach(tx => {
+        nameMap[tx.aptName] = (nameMap[tx.aptName] || 0) + 1;
+      });
+      acResults = Object.entries(nameMap)
+        .map(([name, count]) => ({name, count}))
+        .sort((a, b) => b.count - a.count);
+
+      if (!acResults.length) {
+        list.innerHTML = `<div class="autocomplete-searching" style="color:var(--muted)">검색 결과가 없어요</div>`;
+        return;
+      }
+
+      renderAcList();
+    } catch(e) {
+      list.innerHTML = `<div class="autocomplete-searching" style="color:var(--down)">조회 실패: ${e.message}</div>`;
+    }
+  }, 350);
+}
+
+function renderAcList() {
+  const list = document.getElementById('autocomplete-list');
+  list.style.display = 'block';
+  list.innerHTML = acResults.map((r, i) => `
+    <div class="autocomplete-item${i === acFocusIdx ? ' focused' : ''}"
+      onmousedown="selectAcItem(${i})">
+      <span class="autocomplete-item-name">${r.name}</span>
+      <span class="autocomplete-item-count">${r.count}건</span>
+    </div>`).join('');
+}
+
+function selectAcItem(idx) {
+  const item = acResults[idx];
+  if (!item) return;
+  document.getElementById('apt-name-input').value = item.name;
+  document.getElementById('autocomplete-list').style.display = 'none';
+  const hint = document.getElementById('apt-name-hint');
+  hint.textContent = '✓ 선택됨';
+  hint.style.color = 'var(--accent)';
+  acResults = [];
+}
+
+function onAptNameKeydown(e) {
+  const list = document.getElementById('autocomplete-list');
+  if (list.style.display === 'none' || !acResults.length) {
+    if (e.key === 'Enter') addApartment();
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    acFocusIdx = Math.min(acFocusIdx + 1, acResults.length - 1);
+    renderAcList();
+    list.querySelectorAll('.autocomplete-item')[acFocusIdx]?.scrollIntoView({block:'nearest'});
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    acFocusIdx = Math.max(acFocusIdx - 1, -1);
+    renderAcList();
+    if (acFocusIdx >= 0) list.querySelectorAll('.autocomplete-item')[acFocusIdx]?.scrollIntoView({block:'nearest'});
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (acFocusIdx >= 0) selectAcItem(acFocusIdx);
+    else addApartment();
+  } else if (e.key === 'Escape') {
+    list.style.display = 'none';
+  }
+}
+
+async function addApartment(){
+  const exactName = document.getElementById('apt-name-input').value.trim();
+  if(!exactName){toast('⚠ 아파트를 검색 후 선택해주세요');return;}
+  if(!selectedPyeongs.length){toast('⚠ 평형을 1개 이상 선택해주세요');return;}
+  const region=REGIONS.find(r=>r.code===document.getElementById('region-select').value);
+
+  // 캐시된 데이터 사용, 없으면 재조회
+  let allTxs = acCache[region.code];
+  if(!allTxs){
+    const btn=document.querySelector('#add-modal .btn-primary');
+    btn.disabled=true;btn.innerHTML='<span class="spinner" style="width:13px;height:13px;border-width:2px"></span> 조회중...';
+    try{
+      const months=getLastNMonths(3);allTxs=[];
+      for(const ym of months){allTxs.push(...await fetchMonthData(region.code,ym));}
+      acCache[region.code]=allTxs;
+    }catch(e){toast(`⚠ 조회 실패: ${e.message}`,5000);btn.disabled=false;btn.innerHTML='추가하기';return;}
+    btn.disabled=false;btn.innerHTML='추가하기';
+  }
+
+  // 정확한 이름으로 등록
+  const apt={id:`${region.code}_${Date.now()}`,lawdCd:region.code,regionName:region.name,aptName:exactName,pyeongs:[...selectedPyeongs]};
+  apartments.push(apt);saveApts();closeModal('add-modal');renderGrid();
+
+  const result={};
+  for(const p of selectedPyeongs){
+    const def=PYEONG_DEFS[p];
+    result[p]=allTxs
+      .filter(tx=>tx.aptName===exactName && tx.area>=def.minM2 && tx.area<def.maxM2)
+      .sort((a,b)=>`${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
+  }
+  transactions[apt.id]=result;
+  const flat=Object.values(result).flat();
+  newCounts[apt.id]=flat.length;
+  lastSeen[apt.id]=new Set(flat.map(t=>t.id));
+  saveSeen();
+  document.getElementById('last-updated-label').textContent=`마지막 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
+  renderGrid();toast(`✅ ${exactName} 추가 완료!`);
+}
+function removeApt(aptId){
+  apartments=apartments.filter(a=>a.id!==aptId);delete transactions[aptId];delete newCounts[aptId];
+  saveApts();renderGrid();
+}
+
+function openDetail(aptId){
+  const apt=apartments.find(a=>a.id===aptId);if(!apt)return;
+  detailAptId=aptId;
+  if((newCounts[aptId]||0)>0){
+    newCounts[aptId]=0;
+    const allTxs=Object.values(transactions[aptId]||{}).flat();
+    lastSeen[aptId]=new Set(allTxs.map(t=>t.id));saveSeen();renderGrid();
+  }
+  document.getElementById('sheet-title').textContent=apt.aptName;
+  document.getElementById('sheet-sub').textContent=`${apt.regionName} · 최근 3개월 실거래`;
+  document.getElementById('detail-tabs').innerHTML=apt.pyeongs.map(p=>
+    `<button class="detail-tab${p===apt.pyeongs[0]?' active':''}" onclick="switchDetailTab('${p}',this)">${PYEONG_DEFS[p].label}</button>`
+  ).join('');
+  detailActivePyeong=apt.pyeongs[0];
+  renderDetailBody(aptId,detailActivePyeong);
   openModal('detail-sheet');
 }
-
-// ═══════════════════════════════════════════════════════════════
-//  지역 셀렉트
-// ═══════════════════════════════════════════════════════════════
-function populateRegions(filter) {
-  const sel = document.getElementById('region-select');
-  const filtered = REGIONS.filter(r => !filter || r.name.includes(filter));
-  sel.innerHTML = filtered.map(r =>
-    `<option value="${r.code}">${r.name}</option>`
-  ).join('');
+function switchDetailTab(p,btn){
+  document.querySelectorAll('.detail-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');detailActivePyeong=p;renderDetailBody(detailAptId,p);
+}
+function renderDetailBody(aptId,p){
+  const txs=(transactions[aptId]||{})[p]||[];
+  const body=document.getElementById('sheet-body');
+  if(!txs.length){body.innerHTML='<div class="tx-no">조회된 거래 내역이 없습니다</div>';return;}
+  body.innerHTML=txs.map((tx,i)=>{
+    const prev=txs[i+1];const diff=prev?tx.price-prev.price:null;
+    const dh=diff!==null?`<div class="tx-diff ${diff>0?'down-color':diff<0?'up-color':'neu-color'}">${diff>0?'▲':diff<0?'▼':'─'} ${formatPrice(Math.abs(diff))}</div>`:'';
+    return `<div class="tx-row"><div><div class="tx-date">${tx.year}.${tx.month}.${tx.day} · ${tx.floor}층</div><div class="tx-detail">${pyeongStr(tx.area)} (${tx.area}㎡)</div></div><div><div class="tx-price">${formatPrice(tx.price)}</div>${dh}</div></div>`;
+  }).join('');
 }
 
-function filterRegions() {
-  const q = document.getElementById('region-search').value;
-  populateRegions(q);
-}
+function openModal(id){const el=document.getElementById(id);el.style.display='flex';requestAnimationFrame(()=>el.classList.add('show'));}
+function closeModal(id){const el=document.getElementById(id);el.classList.remove('show');setTimeout(()=>{el.style.display='none';},220);}
+function backdropClose(e,id){if(e.target===e.currentTarget)closeModal(id);}
 
-// ═══════════════════════════════════════════════════════════════
-//  모달 헬퍼
-// ═══════════════════════════════════════════════════════════════
-function openModal(id) {
-  const el = document.getElementById(id);
-  el.style.display = 'flex';
-  requestAnimationFrame(() => el.classList.add('show'));
-}
-
-function closeModal(id) {
-  const el = document.getElementById(id);
-  el.classList.remove('show');
-  setTimeout(() => { el.style.display = 'none'; }, 220);
-}
-
-function backdropClose(e, id) {
-  if (e.target === e.currentTarget) closeModal(id);
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  초기화
-// ═══════════════════════════════════════════════════════════════
-(function init() {
-  // API 키 고정
-  apiKey = '11dd61957e19e1f4fd453a52a0fd3b35e83ec8696dc1d39030ac588e8c41b53b';
-  localStorage.setItem('apt_apikey', apiKey);
-
-  load();
-  populateRegions('');
-
-  // 모달 초기 숨김
-  document.getElementById('add-modal').style.display = 'none';
-  document.getElementById('detail-sheet').style.display = 'none';
-
-  // 항상 대시보드로 바로 시작
-  showScreen('dashboard-screen');
+(function init(){
+  loadStorage();
+  const sel=document.getElementById('region-select');
+  sel.innerHTML=REGIONS.map(r=>`<option value="${r.code}">${r.name}</option>`).join('');
+  sel.onchange=()=>{
+    acCache={};
+    const inp=document.getElementById('apt-name-input');
+    inp.value='';
+    inp.disabled=false;
+    inp.style.opacity='1';
+    inp.style.cursor='text';
+    inp.placeholder='예: 헬리오시티, 래미안';
+    inp.focus();
+    document.getElementById('autocomplete-list').style.display='none';
+    document.getElementById('apt-name-hint').textContent='이름을 입력하면 자동검색됩니다';
+    document.getElementById('apt-name-hint').style.color='var(--muted)';
+    acResults=[];
+  };
+  document.getElementById('add-modal').style.display='none';
+  document.getElementById('select-modal').style.display='none';
+  document.getElementById('detail-sheet').style.display='none';
   renderGrid();
-  if (apartments.length > 0) refreshAll();
+  if(apartments.length>0) refreshAll();
 })();
 </script>
 </body>
