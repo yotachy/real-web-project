@@ -860,15 +860,37 @@ function renderChart(pyeong) {
       <text x="${pad.l-6}" y="${(y+4).toFixed(1)}" text-anchor="end" fill="#4a5568" font-size="11" font-family="IBM Plex Mono">${formatPrice(Math.round(price))}</text>`;
   }).join('');
 
-  // X축: 월 기준으로 눈금
+  // X축: 기간에 따라 적절한 눈금 생성
   const xAxisLabels = [];
-  const tickCount = currentPeriod <= 3 ? currentPeriod : currentPeriod <= 12 ? Math.ceil(currentPeriod/2) : Math.ceil(currentPeriod/12);
-  for (let m=0; m<=tickCount; m++) {
-    const d = new Date(now.getFullYear(), now.getMonth()-(currentPeriod-1)+Math.round((currentPeriod/tickCount)*m), 1);
-    const ratio = Math.max(0, Math.min(1, (d - startDate)/(endDate-startDate)));
-    const x = pad.l + ratio * cw;
-    xAxisLabels.push(`<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle" fill="#4a5568" font-size="10">${d.getMonth()+1}월</text>`);
-    xAxisLabels.push(`<line x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}" stroke="#1a2235" stroke-width="1" stroke-dasharray="4,3"/>`);
+  {
+    // 눈금 간격 결정
+    // 3개월→매월, 6개월→매월, 1년→격월, 5년→6개월마다
+    const intervalMonths = currentPeriod <= 6 ? 1 : currentPeriod <= 12 ? 2 : 6;
+
+    // startDate의 다음 달 1일부터 시작
+    let cursor = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
+    const seen = new Set();
+
+    while (cursor <= endDate) {
+      const key = `${cursor.getFullYear()}-${cursor.getMonth()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const ratio = Math.max(0, Math.min(1, (cursor - startDate) / (endDate - startDate)));
+        const x = pad.l + ratio * cw;
+        const yr = cursor.getFullYear();
+        const mo = cursor.getMonth() + 1;
+        // 1월이면 연도 표시, 나머지는 월만
+        const label = mo === 1 ? `${yr}년` : `${mo}월`;
+        const isBold = mo === 1;
+        xAxisLabels.push(`<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle"
+          fill="${isBold ? '#718096' : '#4a5568'}" font-size="${isBold ? 10 : 10}"
+          font-weight="${isBold ? '600' : '400'}">${label}</text>`);
+        xAxisLabels.push(`<line x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}"
+          stroke="${isBold ? '#2a3550' : '#1a2235'}" stroke-width="1" stroke-dasharray="4,3"/>`);
+      }
+      // 다음 눈금
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + intervalMonths, 1);
+    }
   }
 
   // 각 시리즈 SVG 생성
