@@ -162,7 +162,8 @@
       <label class="form-label">평형 선택 <span class="req">*</span> <span style="color:var(--muted);font-weight:400">(최대 2개)</span></label>
       <div class="pyeong-btns">
         <button class="pyeong-btn" data-key="10" onclick="togglePyeong(this)">10평대</button>
-        <button class="pyeong-btn" data-key="20" onclick="togglePyeong(this)">20~30평</button>
+        <button class="pyeong-btn" data-key="20" onclick="togglePyeong(this)">20평대</button>
+        <button class="pyeong-btn" data-key="30" onclick="togglePyeong(this)">30평대</button>
         <button class="pyeong-btn" data-key="40" onclick="togglePyeong(this)">40평대</button>
         <button class="pyeong-btn" data-key="50" onclick="togglePyeong(this)">50평이상</button>
       </div>
@@ -205,10 +206,11 @@
 
 <script>
 const PYEONG_DEFS = {
-  '10':{label:'10평대', minM2:0,   maxM2:66},
-  '20':{label:'20~30평',minM2:66,  maxM2:99},
-  '40':{label:'40평대', minM2:99,  maxM2:132},
-  '50':{label:'50평이상',minM2:132,maxM2:9999},
+  '10':{label:'10평대',  minM2:0,   maxM2:49},
+  '20':{label:'20평대',  minM2:49,  maxM2:76},
+  '30':{label:'30평대',  minM2:76,  maxM2:99},
+  '40':{label:'40평대',  minM2:99,  maxM2:132},
+  '50':{label:'50평이상',minM2:132, maxM2:9999},
 };
 
 const REGIONS = [
