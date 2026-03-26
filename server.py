@@ -83,21 +83,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     get = lambda t, i=item: (i.findtext(t) or '').strip()
                     if get('cdealType') == '해제':
                         continue
-                    price_raw = get('dealAmount').replace(',','').replace(' ','')
-                    if not price_raw.isdigit():
+                    price_raw = get('dealAmount').replace(',','').replace(' ','').replace('\t','').replace('\n','')
+                    if not price_raw or not price_raw.lstrip('-').isdigit():
                         continue
                     price = int(price_raw)
-                    if not price:
+                    if price <= 0:
                         continue
                     apt_nm = get('aptNm')
-                    if not apt_nm:
+                    if not apt_nm or not apt_nm.strip():
+                        continue
+                    # 빈 날짜 방어
+                    yr = get('dealYear')
+                    if not yr or not yr.isdigit():
                         continue
                     items.append({
                         'n': apt_nm,
                         'a': get('excluUseAr'),
                         'f': get('floor'),
                         'p': price,
-                        'y': get('dealYear'),
+                        'y': yr,
                         'm': get('dealMonth'),
                         'd': get('dealDay'),
                     })

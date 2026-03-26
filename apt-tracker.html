@@ -377,59 +377,104 @@ async function fetchBatch(lawdCd, ymds) {
   const map = await res.json(); // { "202501": [{n,a,f,p,y,m,d}, ...], ... }
   const result = {};
   for (const [ymd, items] of Object.entries(map)) {
-    // 서버가 이미 필터링/파싱한 slim 객체 배열
-    result[ymd] = items.map(item => ({
-      aptName: item.n,
-      area:    parseFloat(item.a) || 0,
-      floor:   item.f,
-      price:   item.p,
-      year:    item.y,
-      month:   String(item.m).padStart(2,'0'),
-      day:     String(item.d).padStart(2,'0'),
-      id:      `${item.n}_${item.y}${String(item.m).padStart(2,'0')}${String(item.d).padStart(2,'0')}_F${item.f}_${item.a}`,
-    }));
+    if (!Array.isArray(items)) { result[ymd] = []; continue; }
+    result[ymd] = items
+      .filter(item => item && item.n && item.p > 0)
+      .map(item => {
+        try {
+          const mo = String(item.m||'').padStart(2,'0');
+          const dy = String(item.d||'').padStart(2,'0');
+          const yr = String(item.y||'');
+          const area = parseFloat(item.a)||0;
+          return {
+            aptName: item.n,
+            area,
+            floor:   String(item.f||'-'),
+            price:   item.p,
+            year:    yr,
+            month:   mo,
+            day:     dy,
+            id:      `${item.n}_${yr}${mo}${dy}_F${item.f}_${item.a}`,
+          };
+        } catch(e){ return null; }
+      })
+      .filter(Boolean);
   }
   return result;
 }
 
 async function fetchApt(apt) {
   const ymds = getLastNMonths(currentPeriod);
-  const batchResult = await fetchBatch(apt.lawdCd, ymds);
-  const all = Object.values(batchResult).flat();
+  let batchResult;
+  try {
+    batchResult = await fetchBatch(apt.lawdCd, ymds);
+  } catch(e) {
+    console.warn(`[${apt.aptName}] 배치 조회 실패:`, e.message);
+    // 빈 결과로 처리 (에러 전파 안 함)
+    batchResult = {};
+  }
+  const all = Object.values(batchResult).flat().filter(Boolean);
 
-  const matched = all.filter(tx => tx.aptName.includes(apt.aptName));
+  // 이름 매칭: includes 우선, 없으면 공백/특수문자 제거 후 재시도
+  let matched = all.filter(tx => tx.aptName.includes(apt.aptName));
+  if (!matched.length) {
+    const normSearch = apt.aptName.replace(/[\s\-\(\)]/g,'').toLowerCase();
+    matched = all.filter(tx => {
+      const normName = tx.aptName.replace(/[\s\-\(\)]/g,'').toLowerCase();
+      return normName.includes(normSearch) || normSearch.includes(normName);
+    });
+  }
+
   const result = {};
   for (const p of apt.pyeongs) {
     const def = PYEONG_DEFS[p];
     result[p] = matched
-      .filter(tx => tx.area >= def.minM2 && tx.area < def.maxM2)
+      .filter(tx => tx.area > 0 && tx.area >= def.minM2 && tx.area < def.maxM2)
       .sort((a,b) => `${b.year}${b.month}${b.day}`.localeCompare(`${a.year}${a.month}${a.day}`));
   }
   return result;
 }
 
 function parseXML(xmlStr){
-  const doc=new DOMParser().parseFromString(xmlStr,'text/xml');
-  const code=doc.querySelector('resultCode')?.textContent?.trim();
-  if(code&&code!=='000'&&code!=='00'){
-    throw new Error(`API 오류(${code}): ${doc.querySelector('resultMsg')?.textContent?.trim()||'오류'}`);
+  if (!xmlStr || typeof xmlStr !== 'string') return [];
+  try {
+    const doc=new DOMParser().parseFromString(xmlStr,'text/xml');
+    // XML 파싱 자체 실패 시
+    if (doc.querySelector('parsererror')) return [];
+    const code=doc.querySelector('resultCode')?.textContent?.trim();
+    if(code&&code!=='000'&&code!=='00'){
+      const msg = doc.querySelector('resultMsg')?.textContent?.trim()||'오류';
+      // 데이터 없음(03)은 에러 아님 → 빈 배열 반환
+      if(code==='03'||msg.includes('없')) return [];
+      throw new Error(`API 오류(${code}): ${msg}`);
+    }
+    const items=doc.querySelectorAll('item');
+    if(!items.length) return [];
+    return Array.from(items).map(item=>{
+      try {
+        const g=tag=>item.getElementsByTagName(tag)[0]?.textContent?.trim()||'';
+        const priceRaw=g('dealAmount').replace(/,/g,'').replace(/\s/g,'');
+        const price=priceRaw?parseInt(priceRaw):0;
+        if(!price||isNaN(price)) return null;
+        const cancelled=g('cdealType').trim();
+        if(cancelled==='해제'||cancelled==='취소') return null;
+        const aptNm=g('aptNm');
+        if(!aptNm) return null;
+        const yr=g('dealYear')||'';
+        const mo=(g('dealMonth')||'').padStart(2,'0');
+        const dy=(g('dealDay')||'').padStart(2,'0');
+        if(!yr||!mo||!dy) return null;
+        const areaRaw=g('excluUseAr');
+        const area=areaRaw?parseFloat(areaRaw):0;
+        const floor=g('floor')||'-';
+        return{aptName:aptNm,area,floor,price,year:yr,month:mo,day:dy,
+          id:`${aptNm}_${yr}${mo}${dy}_F${floor}_${area}`};
+      } catch(e){ return null; }
+    }).filter(Boolean);
+  } catch(e){
+    console.warn('XML 파싱 실패:', e.message);
+    return [];
   }
-  const items=doc.querySelectorAll('item');
-  if(!items.length) return [];
-  return Array.from(items).map(item=>{
-    const g=tag=>item.getElementsByTagName(tag)[0]?.textContent?.trim()||'';
-    const price=parseInt(g('dealAmount').replace(/,/g,'').replace(/\s/g,''))||0;
-    if(!price) return null;
-    const cancelled=g('cdealType').trim();
-    if(cancelled==='해제') return null;
-    const aptNm=g('aptNm');
-    if(!aptNm) return null;
-    const yr=g('dealYear'),mo=g('dealMonth').padStart(2,'0'),dy=g('dealDay').padStart(2,'0');
-    const area=parseFloat(g('excluUseAr'))||0;
-    const floor=g('floor');
-    return{aptName:aptNm,area,floor,price,year:yr,month:mo,day:dy,
-      id:`${aptNm}_${yr}${mo}${dy}_F${floor}_${area}`};
-  }).filter(Boolean);
 }
 
 function calcStats(txs){
@@ -483,7 +528,7 @@ function renderCard(apt,delay=0){
   }else{
     body=apt.pyeongs.map(p=>{
       const txs=txMap[p]||[];const stats=calcStats(txs);
-      if(!stats) return `<div class="pyeong-section"><div class="pyeong-label">${PYEONG_DEFS[p].label}</div><div class="no-data">거래 내역 없음</div></div>`;
+      if(!stats) return `<div class="pyeong-section"><div class="pyeong-label">${PYEONG_DEFS[p].label}</div><div class="no-data">거래 없음 <span style="font-size:10px;color:var(--muted)">(신축·기간조정 확인)</span></div></div>`;
       const cc=stats.change===null?'neu-color':stats.change>0?'down-color':'up-color';
       const cs=stats.change===null?'-':`${stats.change>0?'▲':'▼'} ${Math.abs(stats.change).toFixed(1)}%`;
       return `<div class="pyeong-section">
