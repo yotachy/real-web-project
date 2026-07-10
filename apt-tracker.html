@@ -351,6 +351,7 @@
         <input type="text" id="apt-name-input" placeholder="시/도와 구/군을 먼저 선택해주세요"
           oninput="onAptNameInput(this.value)"
           onkeydown="onAptNameKeydown(event)"
+          onblur="setTimeout(function(){var l=document.getElementById('autocomplete-list');if(l)l.style.display='none';},150)"
           autocomplete="off" disabled
           style="opacity:0.4;cursor:not-allowed;">
         <div class="autocomplete-list" id="autocomplete-list" style="display:none"></div>
@@ -543,8 +544,11 @@ async function fetchBatch(lawdCd, ymds) {
   return merged;
 }
 
-async function refreshAll(){
-  if(isRefreshing||!apartments.length) return;
+let refreshGen = 0;  // 조회 세대: 기간 변경 등으로 새 조회가 시작되면 이전 조회 결과를 폐기
+// suppressNew=true → '신규(+N)' 계산 생략(기간 변경 등, 실제 새 데이터가 아님)
+async function refreshAll(suppressNew){
+  if(!apartments.length) return;
+  const gen = ++refreshGen;   // 이 조회의 세대 (더 최신 조회가 시작되면 gen !== refreshGen)
   isRefreshing=true;
 
   // 지역별 그룹화: 같은 lawdCd는 API 한 번만 호출
@@ -554,31 +558,40 @@ async function refreshAll(){
     regionMap[apt.lawdCd].push(apt);
   });
 
+  const ymds = getLastNMonths(currentPeriod);   // 조회 시작 시점의 기간 스냅샷
   // 지역별 병렬 조회
   await Promise.all(Object.entries(regionMap).map(async ([lawdCd, apts]) => {
     try {
-      const ymds = getLastNMonths(currentPeriod);
       const batchResult = await fetchBatch(lawdCd, ymds);
+      if(gen !== refreshGen) return;   // 더 최신 조회가 시작됨 → 이 결과 폐기(구 기간 덮어쓰기 방지)
       const regionAll = Object.values(batchResult).flat().filter(Boolean);
 
       for (const apt of apts) {
-        const matched = matchByName(regionAll, apt.aptName);
+        if(!apartments.some(a=>a.id===apt.id)) continue;   // 조회 중 삭제된 아파트 스킵(고아 상태 방지)
+        // add 시점과 동일한 '정확 일치' 사용 — 이웃 단지(예: 반포자이 ← 반포자이2차) 혼입 방지
+        const matched = regionAll.filter(tx => tx.aptName === apt.aptName);
         const result = {};
         for(const p of apt.pyeongs){
           result[p] = bucketByPyeong(matched, p);
         }
         transactions[apt.id] = result;
-        const seen = lastSeen[apt.id]||new Set();
         const allTxs = Object.values(result).flat();
-        newCounts[apt.id] = allTxs.filter(tx=>!seen.has(tx.id)).length;
+        if(suppressNew){
+          newCounts[apt.id] = 0;   // 기간 변경 등: 창만 넓어졌을 뿐 새 거래 아님
+        } else {
+          const seen = lastSeen[apt.id]||new Set();
+          newCounts[apt.id] = allTxs.filter(tx=>!seen.has(tx.id)).length;
+        }
         lastSeen[apt.id] = new Set(allTxs.map(t=>t.id));
       }
     } catch(e){
+      if(gen !== refreshGen) return;
       console.error(`지역 ${lawdCd} 조회 실패:`, e.message);
       toast(`⚠ 조회 실패: ${e.message}`, 5000);
     }
   }));
 
+  if(gen !== refreshGen) return;   // 최신 조회가 아니면 렌더/완료토스트 스킵
   saveSeen();
   renderGrid();
   isRefreshing=false;
@@ -776,34 +789,30 @@ function updateGuSelect(city) {
   guEl.style.cursor = 'pointer';
 }
 
-function onCityChange() {
-  const city = document.getElementById('city-select').value;
-  updateGuSelect(city);
-  // 구 바뀌면 아파트 입력 리셋
-  const inp = document.getElementById('apt-name-input');
-  inp.value = '';
-  inp.disabled = true;
-  inp.style.opacity = '0.4';
-  inp.style.cursor = 'not-allowed';
-  inp.placeholder = '구/군을 선택해주세요';
-  document.getElementById('autocomplete-list').style.display = 'none';
-  document.getElementById('apt-name-hint').textContent = '구/군 선택 후 이름을 입력하면 자동검색됩니다';
-  document.getElementById('apt-name-hint').style.color = 'var(--muted)';
-  acCache = {}; acResults = [];
-}
-
-function onGuChange() {
-  acCache = {}; acResults = [];
+// 구/군은 native <select> 라 항상 값이 있음 → 아파트 입력은 모달이 열려 있는 한 항상 활성.
+// (이전엔 gu의 change 이벤트로만 활성화돼, 기본 선택 상태에선 입력이 영구히 막혀 있었음)
+function resetAptInput(focus) {
   const inp = document.getElementById('apt-name-input');
   inp.value = '';
   inp.disabled = false;
   inp.style.opacity = '1';
   inp.style.cursor = 'text';
   inp.placeholder = '예: 헬리오시티, 래미안';
-  inp.focus();
+  const hint = document.getElementById('apt-name-hint');
+  hint.textContent = '이름을 입력하면 자동검색됩니다';
+  hint.style.color = 'var(--muted)';
   document.getElementById('autocomplete-list').style.display = 'none';
-  document.getElementById('apt-name-hint').textContent = '이름을 입력하면 자동검색됩니다';
-  document.getElementById('apt-name-hint').style.color = 'var(--muted)';
+  acCache = {}; acResults = []; acFocusIdx = -1; clearTimeout(acTimer);
+  if (focus) inp.focus();
+}
+
+function onCityChange() {
+  updateGuSelect(document.getElementById('city-select').value);
+  resetAptInput(true);   // 새 시/도의 첫 구/군이 자동 선택되므로 바로 입력 가능
+}
+
+function onGuChange() {
+  resetAptInput(true);
 }
 
 function openAddModal(){
@@ -811,13 +820,7 @@ function openAddModal(){
   // 시/도 서울 기본값으로 리셋
   const cityEl2 = document.getElementById('city-select');
   if(cityEl2){ cityEl2.value = '서울특별시'; updateGuSelect('서울특별시'); }
-  const inp=document.getElementById('apt-name-input');
-  inp.value='';inp.disabled=true;inp.style.opacity='0.4';
-  inp.style.cursor='not-allowed';inp.placeholder='구/군을 선택 후 입력하세요';
-  document.getElementById('autocomplete-list').style.display='none';
-  document.getElementById('apt-name-hint').textContent='지역 선택 후 이름을 입력하면 자동검색됩니다';
-  document.getElementById('apt-name-hint').style.color='var(--muted)';
-  acResults=[];acFocusIdx=-1;clearTimeout(acTimer);
+  resetAptInput(false);   // 서울/종로구 기본 선택 상태에서 곧바로 입력 가능
   selectedPyeongs=[];
   document.querySelectorAll('.pyeong-btn').forEach(b=>{
     b.classList.remove('active');
@@ -832,12 +835,14 @@ let acCache = {};      // `${regionCode}_${period}` → 전체 tx 캐시
 let acTimer = null;
 let acFocusIdx = -1;
 let acResults = [];    // [{name, count}]
+let acSeq = 0;         // 응답 순서 보장 토큰 (뒤늦게 온 이전 검색 결과 폐기)
 
 async function onAptNameInput(val) {
   const hint = document.getElementById('apt-name-hint');
   const list = document.getElementById('autocomplete-list');
   clearTimeout(acTimer);
   acFocusIdx = -1;
+  const seq = ++acSeq;   // 이 입력의 순번
 
   if (!val.trim()) {
     list.style.display = 'none';
@@ -860,13 +865,14 @@ async function onAptNameInput(val) {
 
   acTimer = setTimeout(async () => {
     try {
-      // 캐시 없으면 API 조회 (3개월치)
+      // 캐시 없으면 API 조회 (현재 기간치)
       const cacheKey = `${regionCode}_${currentPeriod}`;
       if (!acCache[cacheKey]) {
         const ymds = getLastNMonths(currentPeriod);
         const batchResult = await fetchBatch(regionCode, ymds);
         acCache[cacheKey] = Object.values(batchResult).flat();
       }
+      if (seq !== acSeq) return;   // 더 최신 입력이 있음 → 이 결과 폐기(순서 뒤바뀜 방지)
 
       const allTxs = acCache[cacheKey];
       const keyword = val.trim();
@@ -916,24 +922,26 @@ function selectAcItem(idx) {
 
 function onAptNameKeydown(e) {
   const list = document.getElementById('autocomplete-list');
-  if (list.style.display === 'none' || !acResults.length) {
+  const listOpen = list.style.display !== 'none';
+  // 목록이 닫혀 있을 때만 Enter 로 바로 제출. (검색중·결과없음 등 목록이 떠 있으면 제출하지 않음)
+  if (!listOpen) {
     if (e.key === 'Enter') addApartment();
     return;
   }
-  if (e.key === 'ArrowDown') {
+  if (e.key === 'ArrowDown' && acResults.length) {
     e.preventDefault();
     acFocusIdx = Math.min(acFocusIdx + 1, acResults.length - 1);
     renderAcList();
     list.querySelectorAll('.autocomplete-item')[acFocusIdx]?.scrollIntoView({block:'nearest'});
-  } else if (e.key === 'ArrowUp') {
+  } else if (e.key === 'ArrowUp' && acResults.length) {
     e.preventDefault();
     acFocusIdx = Math.max(acFocusIdx - 1, -1);
     renderAcList();
     if (acFocusIdx >= 0) list.querySelectorAll('.autocomplete-item')[acFocusIdx]?.scrollIntoView({block:'nearest'});
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    if (acFocusIdx >= 0) selectAcItem(acFocusIdx);
-    else addApartment();
+    // 결과가 있으면 하이라이트(또는 첫 항목) 선택. 검색중/결과없음이면 아무것도 안 함(오제출 방지)
+    if (acResults.length) selectAcItem(acFocusIdx >= 0 ? acFocusIdx : 0);
   } else if (e.key === 'Escape') {
     list.style.display = 'none';
   }
@@ -945,6 +953,11 @@ async function addApartment(){
   if(!selectedPyeongs.length){toast('⚠ 평형을 1개 이상 선택해주세요');return;}
   if(apartments.length >= 10){toast('⚠ 아파트는 최대 10개까지 추가할 수 있어요', 3500);return;}
   const region=REGIONS.find(r=>r.code===document.getElementById('region-select').value);
+  // 중복 방지: 같은 지역·이름에 선택 평형이 하나라도 겹치면 차단(동일 카드 중복 생성 방지)
+  if(apartments.some(a => a.lawdCd===region.code && a.aptName===exactName
+      && a.pyeongs.some(p => selectedPyeongs.includes(p)))){
+    toast('⚠ 이미 추가된 아파트·평형이에요', 3500); return;
+  }
 
   // 캐시된 데이터 사용, 없으면 재조회
   const ck = `${region.code}_${currentPeriod}`;
@@ -961,18 +974,24 @@ async function addApartment(){
     btn.disabled=false;btn.innerHTML='추가하기';
   }
 
+  // 지역 데이터에 정확히 일치하는 아파트가 없으면(오타·미선택) 유령 빈 카드 방지
+  const exactTxs=allTxs.filter(tx=>tx.aptName===exactName);
+  if(!exactTxs.length){
+    toast('⚠ 자동완성 목록에서 아파트를 선택하거나 조회 기간을 늘려보세요', 4500);
+    return;
+  }
+
   // 정확한 이름으로 등록
   const apt={id:`${region.code}_${Date.now()}`,lawdCd:region.code,regionName:region.name,aptName:exactName,pyeongs:[...selectedPyeongs]};
   apartments.push(apt);saveApts();closeModal('add-modal');renderGrid();
 
-  const exactTxs=allTxs.filter(tx=>tx.aptName===exactName);
   const result={};
   for(const p of selectedPyeongs){
     result[p]=bucketByPyeong(exactTxs, p);
   }
   transactions[apt.id]=result;
   const flat=Object.values(result).flat();
-  newCounts[apt.id]=flat.length;
+  newCounts[apt.id]=0;   // 방금 추가·조회한 것이므로 '신규' 아님(가짜 +N 방지)
   lastSeen[apt.id]=new Set(flat.map(t=>t.id));
   saveSeen();
 
@@ -998,10 +1017,10 @@ function setPeriod(btn) {
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 
-  // 캐시 + 트랜잭션 무효화, isRefreshing 초기화 (진행중이던 조회 중단)
+  // 캐시·트랜잭션·신규카운트 무효화 (기간이 바뀌면 기존 결과는 다른 기준)
   acCache = {};
   Object.keys(transactions).forEach(k => delete transactions[k]);
-  isRefreshing = false; // 강제 초기화로 새 기간 조회 보장
+  Object.keys(newCounts).forEach(k => delete newCounts[k]);   // 기간 변경발 가짜 +N 방지
   renderGrid();
   if(selectedAptIds.length) {
     // 선택된 카드 있으면 차트 빈 상태로
@@ -1010,7 +1029,7 @@ function setPeriod(btn) {
     document.getElementById('chart-svg-wrap').innerHTML = '<div style="height:200px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px"><span class="spinner"></span>&nbsp; 조회중...</div>';
     document.getElementById('tx-list-body').innerHTML = '';
   }
-  if (apartments.length > 0) refreshAll();
+  if (apartments.length > 0) refreshAll(true);   // 기간 변경: 신규 배지 억제
 }
 
 // ─── 비교 차트 ──────────────────────────────────────────────────
@@ -1269,21 +1288,21 @@ function renderChart() {
   const budgetVal = parseFloat(document.getElementById('budget-input')?.value);
   if (budgetChk?.checked && !isNaN(budgetVal) && budgetVal > 0) {
     const budgetManwon = budgetVal * 10000;
-    const by = priceToY(budgetManwon);
-    // Y축 범위 안에 있을 때만
-    if (by >= pad.t && by <= pad.t + ch) {
-      budgetLineEl = `
-        <line x1="${pad.l}" y1="${by.toFixed(1)}" x2="${(W-pad.r).toFixed(1)}" y2="${by.toFixed(1)}"
-          stroke="#e8b84b" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.8"/>
-        <rect x="${(W-pad.r+4).toFixed(1)}" y="${(by-9).toFixed(1)}" width="42" height="18" rx="4"
-          fill="#e8b84b" opacity="0.15"/>
-        <rect x="${(W-pad.r+4).toFixed(1)}" y="${(by-9).toFixed(1)}" width="42" height="18" rx="4"
-          fill="none" stroke="#e8b84b" stroke-width="1" opacity="0.6"/>
-        <text x="${(W-pad.r+25).toFixed(1)}" y="${(by+4).toFixed(1)}"
-          text-anchor="middle" fill="#e8b84b" font-size="9" font-family="IBM Plex Mono" font-weight="700">
-          ${budgetVal}억
-        </text>`;
-    }
+    const rawBy = priceToY(budgetManwon);
+    // 범위 밖이면 숨기지 말고 가장자리로 클램프 + ▲(위)/▼(아래) 표시
+    const off = rawBy < pad.t ? '▲' : rawBy > pad.t + ch ? '▼' : '';
+    const by = Math.max(pad.t, Math.min(pad.t + ch, rawBy));
+    budgetLineEl = `
+      <line x1="${pad.l}" y1="${by.toFixed(1)}" x2="${(W-pad.r).toFixed(1)}" y2="${by.toFixed(1)}"
+        stroke="#e8b84b" stroke-width="1.5" stroke-dasharray="8,4" opacity="${off ? '0.45' : '0.8'}"/>
+      <rect x="${(W-pad.r+4).toFixed(1)}" y="${(by-9).toFixed(1)}" width="48" height="18" rx="4"
+        fill="#e8b84b" opacity="0.15"/>
+      <rect x="${(W-pad.r+4).toFixed(1)}" y="${(by-9).toFixed(1)}" width="48" height="18" rx="4"
+        fill="none" stroke="#e8b84b" stroke-width="1" opacity="0.6"/>
+      <text x="${(W-pad.r+28).toFixed(1)}" y="${(by+4).toFixed(1)}"
+        text-anchor="middle" fill="#e8b84b" font-size="9" font-family="IBM Plex Mono" font-weight="700">
+        ${off}${budgetVal}억
+      </text>`;
   }
 
   // crosshair용 데이터 전역 저장
@@ -1450,7 +1469,9 @@ function markRead(aptId) {
 }
 
 function removeApt(aptId) {
-  apartments=apartments.filter(a=>a.id!==aptId);delete transactions[aptId];delete newCounts[aptId];
+  apartments=apartments.filter(a=>a.id!==aptId);delete transactions[aptId];delete newCounts[aptId];delete lastSeen[aptId];
+  // 상세 시트가 이 아파트로 열려 있으면 닫기(삭제 후 빈/오래된 내용 방지)
+  if(detailAptId===aptId){ detailAptId=null; closeModal('detail-sheet'); }
   const hadSel = selectedAptIds.some(s => s.aptId === aptId);
   selectedAptIds = selectedAptIds.filter(s => s.aptId !== aptId);
   if(hadSel){
@@ -1466,7 +1487,7 @@ function removeApt(aptId) {
       renderChart();
     }
   }
-  saveApts();renderGrid();
+  saveApts();saveSeen();renderGrid();
 }
 
 function openDetail(aptId){
