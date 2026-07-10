@@ -6,10 +6,18 @@
 
 | 파일 | 설명 |
 |---|---|
-| `apt-tracker.html` | UI + JS 인라인 단일 페이지 앱 |
+| `apt-tracker.html` | 단일 페이지 앱 (UI + 뷰 로직) |
+| `apt-tracker.lib.js` | 순수 로직 헬퍼(포맷·평형·통계·매칭·escapeHtml). 브라우저 전역 + Node 양용 |
 | `server.py` | 로컬 개발용 Python 서버 (정적 서빙 + 배치 프록시) |
 | `batch.php` | PHP 정적 호스팅용 배치 프록시 (server.py 없이 동작) |
+| `tests/` | 단위·통합 테스트 (`run.sh`) |
 | `config.local.php.example` | API 키 보관 파일 템플릿 |
+
+## 테스트
+
+```bash
+./tests/run.sh    # JS 단위·통합(node --test) + Python 단위(server.py parse_slim, unittest)
+```
 
 프론트엔드는 `batch.php` 경로로 데이터를 요청한다. **로컬 Python(`server.py`) 과 PHP 정적 호스팅 양쪽에서 동일하게 동작** — `server.py` 가 `/batch` 와 `/batch.php` 를 모두 배치 핸들러로 라우팅한다.
 

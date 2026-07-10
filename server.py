@@ -7,14 +7,50 @@
 """
 import http.server, socketserver, urllib.request, urllib.parse
 import json, os, time, threading
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+# ── XML slim 파서 (모듈 레벨 — 테스트 가능) ──────────────────────
+# 청약홈 실거래가 XML → 필요 필드만. 해제/무효/0원/빈이름/빈날짜 제거.
+def parse_slim(xml_str):
+    try:
+        root = ET.fromstring(xml_str)
+    except Exception:
+        return []
+    items = []
+    for item in root.iter('item'):
+        get = lambda t, i=item: (i.findtext(t) or '').strip()
+        if get('cdealType') == '해제':
+            continue
+        price_raw = get('dealAmount').replace(',', '').replace(' ', '').replace('\t', '').replace('\n', '')
+        if not price_raw or not price_raw.lstrip('-').isdigit():
+            continue
+        price = int(price_raw)
+        if price <= 0:
+            continue
+        apt_nm = get('aptNm')
+        if not apt_nm:
+            continue
+        yr = get('dealYear')
+        if not yr or not yr.isdigit():
+            continue
+        items.append({
+            'n': apt_nm,
+            'a': get('excluUseAr'),
+            'f': get('floor'),
+            'p': price,
+            'y': yr,
+            'm': get('dealMonth'),
+            'd': get('dealDay'),
+        })
+    return items
 
 PORT = 8000
 # data.go.kr serviceKey — 소스에 하드코딩 금지. 환경변수에서 로드.
 #   export DATA_GO_KR_KEY=...   또는   set -a; . ../.deploy.env; set +a
+# import 시엔 검증하지 않음(테스트에서 import 가능). 서버 기동 시 __main__ 에서 확인.
 API_KEY = os.environ.get("DATA_GO_KR_KEY", "")
-if not API_KEY:
-    raise SystemExit("DATA_GO_KR_KEY 환경변수 필요 (export DATA_GO_KR_KEY=... 또는 .deploy.env 로드)")
 CACHE_TTL = 1800  # 30분
 MAX_WORKERS = 10  # 동시 API 호출 수
 
@@ -79,42 +115,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     # ── 배치: 여러 달 병렬 처리 → 필요 필드만 JSON 반환 ──────────
     def handle_batch(self, qs):
-        import xml.etree.ElementTree as ET
-
-        def parse_slim(xml_str):
-            try:
-                root = ET.fromstring(xml_str)
-                items = []
-                for item in root.iter('item'):
-                    get = lambda t, i=item: (i.findtext(t) or '').strip()
-                    if get('cdealType') == '해제':
-                        continue
-                    price_raw = get('dealAmount').replace(',','').replace(' ','').replace('\t','').replace('\n','')
-                    if not price_raw or not price_raw.lstrip('-').isdigit():
-                        continue
-                    price = int(price_raw)
-                    if price <= 0:
-                        continue
-                    apt_nm = get('aptNm')
-                    if not apt_nm or not apt_nm.strip():
-                        continue
-                    # 빈 날짜 방어
-                    yr = get('dealYear')
-                    if not yr or not yr.isdigit():
-                        continue
-                    items.append({
-                        'n': apt_nm,
-                        'a': get('excluUseAr'),
-                        'f': get('floor'),
-                        'p': price,
-                        'y': yr,
-                        'm': get('dealMonth'),
-                        'd': get('dealDay'),
-                    })
-                return items
-            except Exception:
-                return []
-
         try:
             lawd_cd = qs.get('LAWD_CD', [''])[0]
             ymds_raw = qs.get('YMDS', [''])[0]
@@ -168,6 +168,8 @@ class ThreadingServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
 
 if __name__ == '__main__':
+    if not API_KEY:
+        raise SystemExit("DATA_GO_KR_KEY 환경변수 필요 (export DATA_GO_KR_KEY=... 또는 .deploy.env 로드)")
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     print(f"✅ 실거래가 모니터 서버 시작! (멀티스레드 + 캐시)")
     print(f"👉 http://localhost:{PORT}")
