@@ -1,0 +1,5 @@
+# data.go.kr serviceKey — 커밋 금지 (서버/로컬에만 존재)
+config.local.php
+
+__pycache__/
+*.pyc

@@ -10,7 +10,11 @@ import json, os, time, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 PORT = 8000
-API_KEY = "11dd61957e19e1f4fd453a52a0fd3b35e83ec8696dc1d39030ac588e8c41b53b"
+# data.go.kr serviceKey — 소스에 하드코딩 금지. 환경변수에서 로드.
+#   export DATA_GO_KR_KEY=...   또는   set -a; . ../.deploy.env; set +a
+API_KEY = os.environ.get("DATA_GO_KR_KEY", "")
+if not API_KEY:
+    raise SystemExit("DATA_GO_KR_KEY 환경변수 필요 (export DATA_GO_KR_KEY=... 또는 .deploy.env 로드)")
 CACHE_TTL = 1800  # 30분
 MAX_WORKERS = 10  # 동시 API 호출 수
 
@@ -52,9 +56,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
 
-        if parsed.path == '/proxy':
+        if parsed.path in ('/proxy', '/proxy.php'):
             self.handle_proxy(qs)
-        elif parsed.path == '/batch':
+        elif parsed.path in ('/batch', '/batch.php'):
+            # apt-tracker.html 은 정적 호스팅(PHP) 호환을 위해 batch.php 를 호출.
+            # 로컬 Python 서버에서도 같은 경로를 배치 핸들러로 라우팅.
             self.handle_batch(qs)
         elif parsed.path in ('/', '/index.html'):
             self.serve_html()

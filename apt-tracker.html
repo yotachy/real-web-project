@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>정성인연 프로젝트</title>
+<title>실거래가 모니터</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
@@ -228,7 +228,7 @@
   <!-- 헤더 -->
   <div class="header">
     <div>
-      <div class="header-title">정성인연 <span>프로젝트</span></div>
+      <div class="header-title">실거래가 <span>모니터</span></div>
 
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
@@ -523,7 +523,7 @@ function toast(msg,d=2500){
 // ── 배치 fetch: 서버에서 여러 달 병렬 처리 ─────────────────────
 async function fetchBatchChunk(lawdCd, ymds) {
   // 단일 청크 요청
-  const url = `/batch?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
+  const url = `batch.php?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
   const map = await res.json();
