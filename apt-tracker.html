@@ -298,6 +298,8 @@
   .trend-tag.up{background:rgba(52,211,153,.16);color:var(--up);}
   .trend-tag.down{background:rgba(248,113,113,.16);color:var(--down);}
   .trend-tag.flat{background:rgba(148,163,184,.15);color:#94a3b8;}
+  /* 오래된 실거래(최근가가 과거) 표시 */
+  .stale-tag{font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:rgba(232,184,75,.14);color:var(--accent);white-space:nowrap;}
   /* 아파트 추가 모달: 크게 + 시/도·구/군 2열 + 자주선택 pill */
   .modal-box-lg{max-width:560px;}
   .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
@@ -830,11 +832,15 @@ function renderCard(apt, pyeong){
       const chgStr = chgVal===null?'-':`${chgIcon}${Math.abs(chgVal).toFixed(1)}%`;
       const latestDate = fmtDate(stats.latest.year, stats.latest.month, stats.latest.day);
       const prevDate = prevTx ? fmtDate(prevTx.year, prevTx.month, prevTx.day) : null;
+      // 최근 거래가 오래됐으면(6개월+) 표시 — '최근가'가 실은 과거임을 명시
+      const mAgo = monthsSince(stats.latest.year, stats.latest.month);
+      const staleTag = mAgo >= 6 ? `<span class="stale-tag">${agoLabel(mAgo)}</span>` : '';
       // 컴팩트에서도 보이는 최근가 + 변동률
       priceHtml = `
         <div class="card-price-row">
           <div class="card-price-main">${formatPrice(stats.latest.price)}</div>
           <span class="card-chg ${chgCls}">${chgStr}</span>
+          ${staleTag}
           <div class="card-price-date">${latestDate} · ${stats.latest.floor}층</div>
         </div>`;
       // 상세부: 직전 거래
@@ -1285,6 +1291,7 @@ function computeAndRenderDiscover(){
     const stats=calcStats(bucket);
     const avg=avgPyeongPrice(bucket);
     discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', latest:stats.latest.price, count:bucket.length,
+      latestY:stats.latest.year, latestM:stats.latest.month,
       growth:growthRate(bucket), avg,
       regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
   });
@@ -1305,7 +1312,9 @@ function discRowHtml(r, idx, rank){
   else { primVal=gTxt; primLbl='상승률'; primCls=gCls; }
 
   // 메타: 정렬 기준 제외한 보조 지표만
-  const meta=[`최근 ${formatPrice(r.latest)}`];
+  const rowMAgo=monthsSince(r.latestY, r.latestM);
+  const rowStale=rowMAgo>=6?` <span class="stale-tag">${agoLabel(rowMAgo)}</span>`:'';
+  const meta=[`최근 ${formatPrice(r.latest)}${rowStale}`];
   if(discSort!=='count') meta.push(`${r.count}건`);
   if(discSort!=='avg') meta.push(`${r.avg.toLocaleString()}만/평`);
   if(discSort!=='growth' && g!=null) meta.push(`<span class="${gCls}">${gTxt}</span>`);
@@ -1617,7 +1626,7 @@ function renderChart() {
         const pct = pStart > 0 ? (pEnd - pStart) / pStart * 100 : 0;
         const cls = Math.abs(pct) < 3 ? 'flat' : pct > 0 ? 'up' : 'down';
         s.trend = { pct, cls, label: cls === 'flat' ? '횡보' : cls === 'up' ? '상승세' : '하락세' };
-        trendLines.push(`<line class="trend-line" x1="${xMin.toFixed(1)}" y1="${priceToY(pStart).toFixed(1)}" x2="${xMax.toFixed(1)}" y2="${priceToY(pEnd).toFixed(1)}" stroke="${c.line}" stroke-width="1.6" stroke-dasharray="7,5"/>`);
+        trendLines.push(`<line class="trend-line" x1="${xMin.toFixed(1)}" y1="${priceToY(pStart).toFixed(1)}" x2="${xMax.toFixed(1)}" y2="${priceToY(pEnd).toFixed(1)}" stroke="${c.line}" stroke-width="2.4" stroke-dasharray="0.1,7" stroke-linecap="round" filter="url(#trendGlow)"/>`);
       }
     }
 
@@ -1712,7 +1721,7 @@ function renderChart() {
 
   wrap.innerHTML = `
     <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;display:block">
-      <defs>${defs.join('')}</defs>
+      <defs>${defs.join('')}<filter id="trendGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
       ${gridLines}
       ${xAxisLabels.join('')}
       <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
@@ -1917,8 +1926,10 @@ function renderDetailBody(aptId,p){
   const regionDiff=(rAvg>0&&aptAvg>0)?Math.round((aptAvg-rAvg)/rAvg*100):null;
   const hilo=(s.isHigh&&txs.length>=2)?'<span class="hilo-badge hi">신고가</span>'
     :(s.isLow&&txs.length>=2)?'<span class="hilo-badge lo">신저가</span>':'';
+  const dMAgo=monthsSince(s.latest.year, s.latest.month);
+  const dStale=dMAgo>=6?`<span class="stale-tag">${agoLabel(dMAgo)}</span>`:'';
   const summary=`<div class="detail-summary">
-    <div class="ds-item"><div class="ds-k">최근 실거래</div><div class="ds-v">${formatPrice(s.latest.price)} ${hilo}</div></div>
+    <div class="ds-item"><div class="ds-k">최근 실거래 ${dStale}</div><div class="ds-v">${formatPrice(s.latest.price)} ${hilo}</div></div>
     <div class="ds-item"><div class="ds-k">기간 고점 / 저점</div><div class="ds-v">${formatPrice(s.maxPrice)} <span class="ds-sub">/ ${formatPrice(s.minPrice)}</span></div></div>
     <div class="ds-item"><div class="ds-k">고점 대비</div><div class="ds-v ${fh<0?'down-color':'neu-color'}">${fh}%</div></div>
     <div class="ds-item"><div class="ds-k">거래량</div><div class="ds-v">${s.count}건</div></div>

@@ -13,6 +13,17 @@ test('formatPrice — 억/만/빈값', () => {
   assert.equal(L.formatPrice(110000), '11억');
 });
 
+test('monthsSince / agoLabel — 경과월', () => {
+  const now = new Date(2026, 5, 15); // 2026-06 (month index 5)
+  assert.equal(L.monthsSince('2026', '6', now), 0);
+  assert.equal(L.monthsSince('2026', '1', now), 5);
+  assert.equal(L.monthsSince('2024', '6', now), 24);   // 2년 전
+  assert.equal(L.agoLabel(3), '3개월 전');
+  assert.equal(L.agoLabel(12), '1년 전');
+  assert.equal(L.agoLabel(24), '2년 전');
+  assert.equal(L.agoLabel(14), '1년 2개월 전');
+});
+
 test('fmtDate — 2자리 연도 + 선행0 제거', () => {
   assert.equal(L.fmtDate('2024', '03', '16'), "'24.3.16");
   assert.equal(L.fmtDate(2024, 3, 6), "'24.3.6");

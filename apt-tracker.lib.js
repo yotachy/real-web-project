@@ -28,6 +28,19 @@
     return v.toLocaleString() + '만';
   }
 
+  // 해당 연·월로부터 지금(now 주입 가능)까지 경과 개월수
+  function monthsSince(year, month, now) {
+    now = now || new Date();
+    return (now.getFullYear() * 12 + now.getMonth()) - ((parseInt(year, 10) || 0) * 12 + ((parseInt(month, 10) || 1) - 1));
+  }
+  // 경과 개월 → 'N개월 전' / 'N년 전' / 'N년 M개월 전'
+  function agoLabel(months) {
+    if (months < 0) months = 0;
+    if (months < 12) return months + '개월 전';
+    var y = Math.floor(months / 12), m = months % 12;
+    return m ? y + '년 ' + m + '개월 전' : y + '년 전';
+  }
+
   // (2024, '03', '16') → "'24.3.16"
   function fmtDate(y, m, d) {
     var mm = parseInt(m, 10);
@@ -221,6 +234,8 @@
     PYEONG_DEFS: PYEONG_DEFS,
     M2_PER_PYEONG: M2_PER_PYEONG,
     formatPrice: formatPrice,
+    monthsSince: monthsSince,
+    agoLabel: agoLabel,
     fmtDate: fmtDate,
     m2ToPyeong: m2ToPyeong,
     pyeongStr: pyeongStr,
