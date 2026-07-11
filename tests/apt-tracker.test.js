@@ -37,15 +37,39 @@ test('periodLabel', () => {
   assert.equal(L.periodLabel(36), '3년');
 });
 
-test('calcStats — 변동률/최저/건수', () => {
+test('calcStats — 변동률/최저/최고/고점대비/신고저/건수', () => {
   assert.equal(L.calcStats([]), null);
   assert.equal(L.calcStats(null), null);
+  // 최신순: 110(최근) 100 120  → 고점 120, 저점 100
   const s = L.calcStats([{ price: 110 }, { price: 100 }, { price: 120 }]);
   assert.equal(s.count, 3);
   assert.equal(s.minPrice, 100);
+  assert.equal(s.maxPrice, 120);
   assert.ok(Math.abs(s.change - 10) < 1e-9);         // (110-100)/100*100
+  assert.ok(Math.abs(s.fromHigh - (-8.3333)) < 1e-3); // (110-120)/120*100
+  assert.equal(s.isHigh, false);
+  assert.equal(s.isLow, false);
+  // 최근가가 고점이자 최고
+  const hi = L.calcStats([{ price: 130 }, { price: 100 }]);
+  assert.equal(hi.isHigh, true);
+  assert.equal(hi.fromHigh, 0);
+  // 최근가가 신저가
+  const lo = L.calcStats([{ price: 90 }, { price: 120 }]);
+  assert.equal(lo.isLow, true);
   const single = L.calcStats([{ price: 100 }]);
   assert.equal(single.change, null);                 // 직전 없음
+  assert.equal(single.isHigh, true);                 // 1건이면 고점이자 저점
+});
+
+test('평단가 — pyeongUnitPrice / avgPyeongPrice', () => {
+  // 84.95㎡ ≈ 25.7평, 230000만원 → 약 8,948 만원/평
+  assert.equal(L.pyeongUnitPrice(230000, 84.95), Math.round(230000 / (84.95 / 3.3058)));
+  assert.equal(L.pyeongUnitPrice(0, 84), 0);
+  assert.equal(L.pyeongUnitPrice(1000, 0), 0);
+  const avg = L.avgPyeongPrice([{ price: 100000, area: 84 }, { price: 120000, area: 84 }]);
+  const one = L.pyeongUnitPrice(100000, 84), two = L.pyeongUnitPrice(120000, 84);
+  assert.equal(avg, Math.round((one + two) / 2));
+  assert.equal(L.avgPyeongPrice([]), 0);
 });
 
 test('normalizeName — 공백/괄호/하이픈 제거 + 소문자', () => {

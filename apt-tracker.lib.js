@@ -61,14 +61,42 @@
     return months >= 12 ? (months / 12) + '년' : months + '개월';
   }
 
-  // 거래 배열(최신순 정렬 가정) → 최근/최저/변동률/건수
+  // 거래 배열(최신순 정렬 가정) → 최근/최저/최고/변동률/고점대비/신고·신저/건수
   function calcStats(txs) {
     if (!txs || !txs.length) return null;
     var latest = txs[0];
-    var minPrice = Math.min.apply(null, txs.map(function (t) { return t.price; }));
+    var prices = txs.map(function (t) { return t.price; });
+    var minPrice = Math.min.apply(null, prices);
+    var maxPrice = Math.max.apply(null, prices);
     var prev = txs[1];
     var change = prev ? ((latest.price - prev.price) / prev.price * 100) : null;
-    return { latest: latest, minPrice: minPrice, change: change, count: txs.length };
+    // 고점 대비 현재가(%). 기간 내 최고가 대비 최근 거래. 0 이하(고점이면 0).
+    var fromHigh = maxPrice > 0 ? (latest.price - maxPrice) / maxPrice * 100 : 0;
+    return {
+      latest: latest, prev: prev || null,
+      minPrice: minPrice, maxPrice: maxPrice,
+      change: change, fromHigh: fromHigh,
+      isHigh: latest.price === maxPrice,   // 신고가(기간 내)
+      isLow: latest.price === minPrice,    // 신저가(기간 내)
+      count: txs.length
+    };
+  }
+
+  // 평단가(만원/평) = 거래금액(만원) / 전용평. area 는 ㎡.
+  function pyeongUnitPrice(price, areaM2) {
+    if (!price || !areaM2) return 0;
+    return Math.round(price / (areaM2 / M2_PER_PYEONG));
+  }
+
+  // 거래 배열의 평균 평단가(만원/평)
+  function avgPyeongPrice(txs) {
+    if (!txs || !txs.length) return 0;
+    var sum = 0, n = 0;
+    for (var i = 0; i < txs.length; i++) {
+      var u = pyeongUnitPrice(txs[i].price, txs[i].area);
+      if (u > 0) { sum += u; n++; }
+    }
+    return n ? Math.round(sum / n) : 0;
   }
 
   function normalizeName(s) {
@@ -116,6 +144,8 @@
     getLastNMonths: getLastNMonths,
     periodLabel: periodLabel,
     calcStats: calcStats,
+    pyeongUnitPrice: pyeongUnitPrice,
+    avgPyeongPrice: avgPyeongPrice,
     normalizeName: normalizeName,
     escapeHtml: escapeHtml,
     matchByName: matchByName,

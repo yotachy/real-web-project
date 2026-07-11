@@ -227,6 +227,24 @@
   .card-remove:hover{color:var(--down);}
   /* +N 배지: 절대배치 → 이름과 액션 사이 인라인 필 */
   .card-badge{position:static;flex-shrink:0;align-self:center;animation:pulse 2s infinite;}
+  /* 타이밍·지역평균 지표 칩 */
+  .card-stats{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+  .stat-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;background:var(--card2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted2);white-space:nowrap;}
+  .stat-chip b{font-weight:600;color:var(--muted);font-size:9px;}
+  .stat-chip .up-color{color:var(--up);font-weight:700;}
+  .stat-chip .down-color{color:var(--down);font-weight:700;}
+  .stat-chip .neu-color{color:var(--muted2);font-weight:700;}
+  /* 신고가(강조=골드)·신저가(파랑) 배지 */
+  .hilo-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;vertical-align:middle;}
+  .hilo-badge.hi{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(232,184,75,.4);}
+  .hilo-badge.lo{background:rgba(96,165,250,0.16);color:var(--blue);}
+  /* 상세시트 요약 지표 블록 */
+  .detail-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;padding:14px 0 12px;border-bottom:1px solid var(--border);margin-bottom:6px;}
+  .ds-item{min-width:0;}
+  .ds-k{font-size:11px;color:var(--muted);margin-bottom:3px;}
+  .ds-v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;}
+  .ds-v.up-color{color:var(--up);}.ds-v.down-color{color:var(--down);}.ds-v.neu-color{color:var(--muted2);}
+  .ds-sub{font-family:'Noto Sans KR',sans-serif;font-size:10px;font-weight:400;color:var(--muted);}
   /* 키보드 포커스 가시성 */
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   .apt-card:focus:not(:focus-visible),.card-icon-btn:focus:not(:focus-visible),
@@ -474,6 +492,13 @@ const CITIES = [...new Set(REGIONS.map(r => r.city))];
 
 // API 키는 서버(batch.php/server.py)에만 존재. 클라이언트는 batch.php 프록시만 호출.
 let apartments=[], transactions={}, newCounts={}, lastSeen={}, isRefreshing=false, selectedPyeongs=[];
+let regionAvg={};   // lawdCd -> { 평형키 -> 지역 평균 평단가(만원/평) }  (지역평균 대비용)
+// 지역 전체 거래(regionAll)에서 평형별 평균 평단가 산출 → 카드 '지역평균 대비'에 사용
+function computeRegionAvg(lawdCd, regionAll){
+  const m={};
+  ['10','20','30','40','50'].forEach(p=>{ m[p]=avgPyeongPrice(bucketByPyeong(regionAll, p)); });
+  regionAvg[lawdCd]=m;
+}
 let selectedAptIds = []; // [{aptId, pyeong}]
 let detailAptId=null, detailActivePyeong=null;
 
@@ -565,6 +590,7 @@ async function refreshAll(suppressNew){
       const batchResult = await fetchBatch(lawdCd, ymds);
       if(gen !== refreshGen) return;   // 더 최신 조회가 시작됨 → 이 결과 폐기(구 기간 덮어쓰기 방지)
       const regionAll = Object.values(batchResult).flat().filter(Boolean);
+      computeRegionAvg(lawdCd, regionAll);   // 지역평균 대비용
 
       for (const apt of apts) {
         if(!apartments.some(a=>a.id===apt.id)) continue;   // 조회 중 삭제된 아파트 스킵(고아 상태 방지)
@@ -688,16 +714,15 @@ function renderCard(apt, pyeong){
   const selIdx = getSeriesColorIdx(apt.id, pyeong);
   const selCls = selIdx >= 0 ? ` ${CHART_COLORS[selIdx].cls}` : '';
 
-  let priceHtml = '';
+  let priceHtml = '', statChips = '', hiloBadge = '';
   if(!txMap){
     priceHtml = `<div style="font-size:11px;color:var(--muted);padding:4px 0"><span class="spinner" style="width:11px;height:11px;border-width:1.5px"></span> 조회중</div>`;
   } else {
     const txs = txMap[pyeong] || [];
     const stats = calcStats(txs);
     if(!stats){
-      priceHtml = `<div style="font-size:11px;color:var(--muted);padding:4px 0">${currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월'} 내 거래없음</div>`;
+      priceHtml = `<div style="font-size:11px;color:var(--muted);padding:4px 0">${periodLabel(currentPeriod)} 내 거래없음</div>`;
     } else {
-      const periodLabel = currentPeriod >= 12 ? (currentPeriod/12)+'년' : currentPeriod+'개월';
       const prevTx = txs[1];
       const prevPriceStr = prevTx ? formatPrice(prevTx.price) : null;
       const chgVal = stats.change;
@@ -721,6 +746,24 @@ function renderCard(apt, pyeong){
           </div>
           <div class="card-price-date muted">${prevDate} · ${prevTx.floor}층</div>
         </div>` : `<div class="card-price-date muted" style="margin-top:4px">직전 거래 없음</div>`}`;
+
+      // ── 타이밍·지역평균 지표 (A + C 1단계) ──
+      const fh = Math.round(stats.fromHigh);              // 고점 대비 %(≤0)
+      const rAvg = (regionAvg[apt.lawdCd]||{})[pyeong] || 0;
+      const aptAvg = avgPyeongPrice(txs);
+      let regionChip = '';
+      if(rAvg > 0 && aptAvg > 0){
+        const d = Math.round((aptAvg - rAvg)/rAvg*100);
+        regionChip = `<span class="stat-chip"><b>지역평균</b> <span class="${d>=0?'up-color':'down-color'}">${d>=0?'+':''}${d}%</span></span>`;
+      }
+      statChips = `<div class="card-stats">
+        <span class="stat-chip"><b>고점대비</b> <span class="${fh<0?'down-color':'neu-color'}">${fh}%</span></span>
+        ${regionChip}
+        <span class="stat-chip"><b>거래</b> ${stats.count}건</span>
+      </div>`;
+      // 신고가/신저가(기간 내). 거래 2건 이상일 때만 의미 부여
+      hiloBadge = (stats.isHigh && txs.length>=2) ? `<span class="hilo-badge hi">신고가</span>`
+        : (stats.isLow && txs.length>=2) ? `<span class="hilo-badge lo">신저가</span>` : '';
     }
   }
 
@@ -737,7 +780,7 @@ function renderCard(apt, pyeong){
     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${act};}">
     <div class="card-head">
       <div style="min-width:0;flex:1">
-        <div class="card-apt-name">${safeName}</div>
+        <div class="card-apt-name">${safeName} ${hiloBadge}</div>
         <div class="card-apt-region">${escapeHtml(apt.regionName)}</div>
       </div>
       ${badge}
@@ -750,6 +793,7 @@ function renderCard(apt, pyeong){
     </div>
     ${priceHtml}
     ${sparkSvg}
+    ${statChips}
   </div>`;
 }
 
@@ -974,6 +1018,7 @@ async function addApartment(){
     btn.disabled=false;btn.innerHTML='추가하기';
   }
 
+  computeRegionAvg(region.code, allTxs);   // 지역평균 대비용
   // 지역 데이터에 정확히 일치하는 아파트가 없으면(오타·미선택) 유령 빈 카드 방지
   const exactTxs=allTxs.filter(tx=>tx.aptName===exactName);
   if(!exactTxs.length){
@@ -1512,14 +1557,34 @@ function switchDetailTab(p,btn){
   btn.classList.add('active');detailActivePyeong=p;renderDetailBody(detailAptId,p);
 }
 function renderDetailBody(aptId,p){
+  const apt=apartments.find(a=>a.id===aptId);
   const txs=(transactions[aptId]||{})[p]||[];
   const body=document.getElementById('sheet-body');
   if(!txs.length){body.innerHTML='<div class="tx-no">조회된 거래 내역이 없습니다</div>';return;}
-  body.innerHTML=txs.map((tx,i)=>{
+
+  // ── 요약 지표 블록 (타이밍 + 지역평균) ──
+  const s=calcStats(txs);
+  const fh=Math.round(s.fromHigh);
+  const rAvg=apt?((regionAvg[apt.lawdCd]||{})[p]||0):0;
+  const aptAvg=avgPyeongPrice(txs);
+  const regionDiff=(rAvg>0&&aptAvg>0)?Math.round((aptAvg-rAvg)/rAvg*100):null;
+  const hilo=(s.isHigh&&txs.length>=2)?'<span class="hilo-badge hi">신고가</span>'
+    :(s.isLow&&txs.length>=2)?'<span class="hilo-badge lo">신저가</span>':'';
+  const summary=`<div class="detail-summary">
+    <div class="ds-item"><div class="ds-k">최근 실거래</div><div class="ds-v">${formatPrice(s.latest.price)} ${hilo}</div></div>
+    <div class="ds-item"><div class="ds-k">기간 고점 / 저점</div><div class="ds-v">${formatPrice(s.maxPrice)} <span class="ds-sub">/ ${formatPrice(s.minPrice)}</span></div></div>
+    <div class="ds-item"><div class="ds-k">고점 대비</div><div class="ds-v ${fh<0?'down-color':'neu-color'}">${fh}%</div></div>
+    <div class="ds-item"><div class="ds-k">거래량</div><div class="ds-v">${s.count}건</div></div>
+    ${regionDiff!==null?`<div class="ds-item" style="grid-column:1/-1"><div class="ds-k">지역평균 대비 (평단가)</div><div class="ds-v ${regionDiff>=0?'up-color':'down-color'}">${regionDiff>=0?'+':''}${regionDiff}% <span class="ds-sub">${aptAvg.toLocaleString()} vs 지역 ${rAvg.toLocaleString()}만/평</span></div></div>`:''}
+  </div>`;
+
+  const rows=txs.map((tx,i)=>{
     const prev=txs[i+1];const diff=prev?tx.price-prev.price:null;
-    const dh=diff!==null?`<div class="tx-diff ${diff>0?'down-color':diff<0?'up-color':'neu-color'}">${diff>0?'▲':diff<0?'▼':'─'} ${formatPrice(Math.abs(diff))}</div>`:'';
+    // 카드와 동일 규칙: 상승=up(초록)/하락=down(빨강)
+    const dh=diff!==null?`<div class="tx-diff ${diff>0?'up-color':diff<0?'down-color':'neu-color'}">${diff>0?'▲':diff<0?'▼':'─'} ${formatPrice(Math.abs(diff))}</div>`:'';
     return `<div class="tx-row"><div><div class="tx-date">${fmtDate(tx.year,tx.month,tx.day)} · ${tx.floor}층</div><div class="tx-detail">${pyeongStr(tx.area)}</div></div><div><div class="tx-price">${formatPrice(tx.price)}</div>${dh}</div></div>`;
   }).join('');
+  body.innerHTML=summary+rows;
 }
 
 function openModal(id){const el=document.getElementById(id);el.style.display='flex';requestAnimationFrame(()=>el.classList.add('show'));}
