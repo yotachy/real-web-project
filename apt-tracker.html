@@ -1205,7 +1205,7 @@ function renderDiscover(){
     rows.sort((a,b)=>b.avg-a.avg);
   }
   discShown=rows.slice(0,30);
-  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 2개월↑)'
+  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
     : discSort==='count' ? '거래량순' : '평단가순';
   noteEl.textContent=`${region?region.name:''} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
   if(!discShown.length){

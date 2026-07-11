@@ -109,21 +109,29 @@ test('growthRate — 월별중앙값 회귀 추세선 기준', () => {
   // 입력 순서 무관 (동일 반올림 → 완전 동일)
   assert.equal(L.growthRate([linear[2], linear[0], linear[1]]), L.growthRate(linear));
 
-  // 같은 달에 3건만 있으면 추세 산출 불가 → null
+  // 같은 달에 3건만 있으면 추세 산출 불가 → null (1개월)
   assert.equal(L.growthRate([
     { price: 100000, area: 84, year: '2024', month: '03', day: '01' },
     { price: 110000, area: 84, year: '2024', month: '03', day: '15' },
     { price: 120000, area: 84, year: '2024', month: '03', day: '28' }
   ]), null);
 
+  // 관측 2개월이면(거래 3건이어도) → null (최소 3개월 요구)
+  assert.equal(L.growthRate([
+    { price: 100000, area: 84, year: '2024', month: '01', day: '10' },
+    { price: 110000, area: 84, year: '2024', month: '02', day: '05' },
+    { price: 120000, area: 84, year: '2024', month: '02', day: '20' }
+  ]), null);
+
   // 월 중앙값이 이상치를 완화: 2월 [110000,110000,900000] → median 110000
-  // jan median=100000, feb median=110000 → +10% (900000 무시됨)
+  // jan 100000, feb 110000, mar 120000 (3개월) → 추세 +20% (900000 무시됨)
   assert.ok(Math.abs(L.growthRate([
     { price: 100000, area: 84, year: '2024', month: '01', day: '10' },
     { price: 110000, area: 84, year: '2024', month: '02', day: '05' },
     { price: 110000, area: 84, year: '2024', month: '02', day: '12' },
-    { price: 900000, area: 84, year: '2024', month: '02', day: '20' }
-  ]) - 10) < 0.1);
+    { price: 900000, area: 84, year: '2024', month: '02', day: '20' },
+    { price: 120000, area: 84, year: '2024', month: '03', day: '10' }
+  ]) - 20) < 0.1);
 });
 
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {

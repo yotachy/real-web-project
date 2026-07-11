@@ -139,7 +139,7 @@
   // 첫 관측월 → 마지막 관측월의 추세선 값 변화율을 반환.
   //  - 월 중앙값: 같은 달 안의 층·향·급매 이상치를 완화(평균 대신 중앙값)
   //  - 회귀: 끝점 2구간이 아니라 전체 관측월을 시간가중으로 반영
-  //  - 요구: 거래 3건 이상 + 관측 개월 2개 이상(추세 불가하면 null)
+  //  - 요구: 거래 3건 이상 + 관측 개월 3개 이상(추세 불가하면 null)
   function growthRate(txs) {
     if (!txs || txs.length < 3) return null;
     var byMonth = {};
@@ -151,7 +151,7 @@
     }
     var pts = [];
     for (var k in byMonth) if (byMonth.hasOwnProperty(k)) pts.push([parseInt(k, 10), median(byMonth[k])]);
-    if (pts.length < 2) return null;   // 관측 개월 2개 미만 → 추세 산출 불가
+    if (pts.length < 3) return null;   // 관측 개월 3개 미만 → 추세 산출 불가
     pts.sort(function (a, b) { return a[0] - b[0]; });
     // 최소제곱 회귀 v = a + b*x  (x = 첫 관측월을 0 으로 이동한 월 인덱스)
     var t0 = pts[0][0], n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
