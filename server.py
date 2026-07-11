@@ -93,9 +93,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
 
-        if parsed.path == '/proxy':
+        if parsed.path in ('/proxy', '/proxy.php'):
             self.handle_proxy(qs)
-        elif parsed.path == '/batch':
+        elif parsed.path in ('/batch', '/batch.php'):
+            # apt-tracker.html 은 정적 호스팅(PHP) 호환을 위해 batch.php 를 호출.
+            # 로컬 Python 서버에서도 같은 경로를 배치 핸들러로 라우팅.
             self.handle_batch(qs)
         elif parsed.path in ('/', '/index.html'):
             self.serve_html()
