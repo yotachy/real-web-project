@@ -133,6 +133,7 @@ function parse_slim($xmlStr) {
 
         $items[] = [
             'n' => $aptNm,
+            'u' => $get('umdNm'),   // 법정동 (동명 아파트 구분용)
             'a' => $get('excluUseAr'),
             'f' => $get('floor'),
             'p' => $price,

@@ -262,6 +262,7 @@
   .disc-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
+  .disc-dong,.ac-dong{font-size:11px;font-weight:500;color:var(--muted);}
   .disc-add{background:var(--accent);color:#000;border:none;padding:7px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:opacity .15s;}
   .disc-add:hover{opacity:.88;}
   .disc-add:disabled{background:var(--card2);color:var(--muted);cursor:default;border:1px solid var(--border);}
@@ -587,10 +588,10 @@ async function fetchBatchChunk(lawdCd, ymds) {
           const yr = String(item.y||'');
           const area = parseFloat(item.a)||0;
           return {
-            aptName: item.n, area,
+            aptName: item.n, dong: String(item.u||''), area,
             floor: String(item.f||'-'),
             price: item.p, year: yr, month: mo, day: dy,
-            id: `${item.n}_${yr}${mo}${dy}_F${item.f}_${item.a}`,
+            id: `${item.n}_${item.u||''}_${yr}${mo}${dy}_F${item.f}_${item.a}`,
           };
         } catch(e){ return null; }
       })
@@ -643,8 +644,8 @@ async function refreshAll(suppressNew){
 
       for (const apt of apts) {
         if(!apartments.some(a=>a.id===apt.id)) continue;   // 조회 중 삭제된 아파트 스킵(고아 상태 방지)
-        // add 시점과 동일한 '정확 일치' 사용 — 이웃 단지(예: 반포자이 ← 반포자이2차) 혼입 방지
-        const matched = regionAll.filter(tx => tx.aptName === apt.aptName);
+        // 이름+법정동 정확 일치 — 이웃/동명 단지 혼입 방지 (apt.dong 없으면 하위호환: 이름만)
+        const matched = regionAll.filter(tx => sameApt(tx, apt.aptName, apt.dong));
         const result = {};
         for(const p of apt.pyeongs){
           result[p] = bucketByPyeong(matched, p);
@@ -830,7 +831,7 @@ function renderCard(apt, pyeong){
     <div class="card-head">
       <div style="min-width:0;flex:1">
         <div class="card-apt-name">${safeName} ${hiloBadge}</div>
-        <div class="card-apt-region">${escapeHtml(apt.regionName)}</div>
+        <div class="card-apt-region">${escapeHtml(apt.regionName)}${apt.dong?' · '+escapeHtml(apt.dong):''}</div>
       </div>
       ${badge}
       <div class="card-actions">
@@ -895,7 +896,7 @@ function resetAptInput(focus) {
   hint.textContent = '이름을 입력하면 자동검색됩니다';
   hint.style.color = 'var(--muted)';
   document.getElementById('autocomplete-list').style.display = 'none';
-  acCache = {}; acResults = []; acFocusIdx = -1; clearTimeout(acTimer);
+  acCache = {}; acResults = []; acFocusIdx = -1; selectedDong = ''; clearTimeout(acTimer);
   if (focus) inp.focus();
 }
 
@@ -927,14 +928,16 @@ function openAddModal(){
 let acCache = {};      // `${regionCode}_${period}` → 전체 tx 캐시
 let acTimer = null;
 let acFocusIdx = -1;
-let acResults = [];    // [{name, count}]
+let acResults = [];    // [{name, dong, count}]
 let acSeq = 0;         // 응답 순서 보장 토큰 (뒤늦게 온 이전 검색 결과 폐기)
+let selectedDong = ''; // 자동완성에서 고른 항목의 법정동 (동명 아파트 구분)
 
 async function onAptNameInput(val) {
   const hint = document.getElementById('apt-name-hint');
   const list = document.getElementById('autocomplete-list');
   clearTimeout(acTimer);
   acFocusIdx = -1;
+  selectedDong = '';     // 타이핑 시작 → 이전 선택 동 초기화
   const seq = ++acSeq;   // 이 입력의 순번
 
   if (!val.trim()) {
@@ -970,14 +973,14 @@ async function onAptNameInput(val) {
       const allTxs = acCache[cacheKey];
       const keyword = val.trim();
 
-      // 매칭 아파트명 + 건수 집계
+      // 매칭 아파트: 이름+법정동으로 그룹핑(동명 아파트 분리) + 건수 집계
       const nameMap = {};
       allTxs.filter(tx => tx.aptName.includes(keyword)).forEach(tx => {
-        nameMap[tx.aptName] = (nameMap[tx.aptName] || 0) + 1;
+        const k = aptGroupKey(tx.aptName, tx.dong);
+        if(!nameMap[k]) nameMap[k] = {name: tx.aptName, dong: tx.dong||'', count: 0};
+        nameMap[k].count++;
       });
-      acResults = Object.entries(nameMap)
-        .map(([name, count]) => ({name, count}))
-        .sort((a, b) => b.count - a.count);
+      acResults = Object.values(nameMap).sort((a, b) => b.count - a.count);
 
       if (!acResults.length) {
         list.innerHTML = `<div class="autocomplete-searching" style="color:var(--muted)">검색 결과가 없어요</div>`;
@@ -997,7 +1000,7 @@ function renderAcList() {
   list.innerHTML = acResults.map((r, i) => `
     <div class="autocomplete-item${i === acFocusIdx ? ' focused' : ''}"
       onmousedown="selectAcItem(${i})">
-      <span class="autocomplete-item-name">${escapeHtml(r.name)}</span>
+      <span class="autocomplete-item-name">${escapeHtml(r.name)}${r.dong?` <span class="ac-dong">${escapeHtml(r.dong)}</span>`:''}</span>
       <span class="autocomplete-item-count">${r.count}건</span>
     </div>`).join('');
 }
@@ -1006,9 +1009,10 @@ function selectAcItem(idx) {
   const item = acResults[idx];
   if (!item) return;
   document.getElementById('apt-name-input').value = item.name;
+  selectedDong = item.dong || '';   // 고른 항목의 법정동 기억
   document.getElementById('autocomplete-list').style.display = 'none';
   const hint = document.getElementById('apt-name-hint');
-  hint.textContent = '✓ 선택됨';
+  hint.textContent = item.dong ? `✓ ${item.dong} 선택됨` : '✓ 선택됨';
   hint.style.color = 'var(--accent)';
   acResults = [];
 }
@@ -1046,11 +1050,6 @@ async function addApartment(){
   if(!selectedPyeongs.length){toast('⚠ 평형을 1개 이상 선택해주세요');return;}
   if(apartments.length >= 10){toast('⚠ 아파트는 최대 10개까지 추가할 수 있어요', 3500);return;}
   const region=REGIONS.find(r=>r.code===document.getElementById('region-select').value);
-  // 중복 방지: 같은 지역·이름에 선택 평형이 하나라도 겹치면 차단(동일 카드 중복 생성 방지)
-  if(apartments.some(a => a.lawdCd===region.code && a.aptName===exactName
-      && a.pyeongs.some(p => selectedPyeongs.includes(p)))){
-    toast('⚠ 이미 추가된 아파트·평형이에요', 3500); return;
-  }
 
   // 캐시된 데이터 사용, 없으면 재조회
   const ck = `${region.code}_${currentPeriod}`;
@@ -1067,7 +1066,18 @@ async function addApartment(){
     btn.disabled=false;btn.innerHTML='추가하기';
   }
 
-  const apt = commitApt(region, exactName, selectedPyeongs, allTxs);
+  // 법정동 확정: 자동완성 선택값 우선, 없으면 데이터에 동이 유일할 때 자동 지정
+  let dong = selectedDong;
+  if(!dong){
+    const dongs=[...new Set(allTxs.filter(t=>t.aptName===exactName).map(t=>t.dong||''))];
+    if(dongs.length===1) dong=dongs[0];
+  }
+  // 중복 방지 (이름+동+평형 겹치면 차단)
+  if(apartments.some(a => a.lawdCd===region.code && a.aptName===exactName && (a.dong||'')===(dong||'')
+      && a.pyeongs.some(p => selectedPyeongs.includes(p)))){
+    toast('⚠ 이미 추가된 아파트·평형이에요', 3500); return;
+  }
+  const apt = commitApt(region, exactName, dong, selectedPyeongs, allTxs);
   if(!apt){   // 정확일치 거래 없음(오타·미선택) → 유령 빈 카드 방지
     toast('⚠ 자동완성 목록에서 아파트를 선택하거나 조회 기간을 늘려보세요', 4500);
     return;
@@ -1079,12 +1089,12 @@ async function addApartment(){
   if(apt.pyeongs.length>0) setTimeout(()=>selectCard(apt.id, apt.pyeongs[0]),100);
 }
 
-// 아파트를 관심목록에 등록 (addApartment·발굴 공용). 정확일치 거래 없으면 null.
-function commitApt(region, exactName, pyeongs, allTxs){
+// 아파트를 관심목록에 등록 (addApartment·발굴 공용). 이름+동 정확일치 거래 없으면 null.
+function commitApt(region, exactName, dong, pyeongs, allTxs){
   computeRegionAvg(region.code, allTxs);   // 지역평균 대비용
-  const exactTxs=allTxs.filter(tx=>tx.aptName===exactName);
+  const exactTxs=allTxs.filter(tx=>sameApt(tx, exactName, dong));
   if(!exactTxs.length) return null;
-  const apt={id:`${region.code}_${Date.now()}`,lawdCd:region.code,regionName:region.name,aptName:exactName,pyeongs:[...pyeongs]};
+  const apt={id:`${region.code}_${Date.now()}`,lawdCd:region.code,regionName:region.name,aptName:exactName,dong:dong||'',pyeongs:[...pyeongs]};
   const result={};
   for(const p of pyeongs) result[p]=bucketByPyeong(exactTxs, p);
   apartments.push(apt); transactions[apt.id]=result;
@@ -1175,16 +1185,17 @@ async function runDiscover(){
 function computeAndRenderDiscover(){
   const regionAll=discCache[`${discGu}_${currentPeriod}`];
   if(!regionAll) return;
-  const byName={};
-  regionAll.forEach(tx=>{ (byName[tx.aptName]=byName[tx.aptName]||[]).push(tx); });
+  const byKey={};   // 이름+법정동으로 그룹핑(동명 아파트 분리)
+  regionAll.forEach(tx=>{ const k=aptGroupKey(tx.aptName, tx.dong); (byKey[k]=byKey[k]||[]).push(tx); });
   const rAvg=(regionAvg[discGu]||{})[discPyeong]||0;
   discRows=[];
-  Object.keys(byName).forEach(name=>{
-    const bucket=bucketByPyeong(byName[name], discPyeong);
+  Object.keys(byKey).forEach(k=>{
+    const grp=byKey[k];
+    const bucket=bucketByPyeong(grp, discPyeong);
     if(bucket.length<3) return;   // 노이즈 방지: 기간 내 거래 3건 이상만
     const stats=calcStats(bucket);
     const avg=avgPyeongPrice(bucket);
-    discRows.push({ name, latest:stats.latest.price, count:bucket.length,
+    discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', latest:stats.latest.price, count:bucket.length,
       growth:growthRate(bucket), avg,
       regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
   });
@@ -1196,12 +1207,12 @@ function discRowHtml(r, idx, rank){
   const g=r.growth;
   const gStr = g==null ? '-' : `${g>=0?'+':''}${g.toFixed(1)}%`;
   const gCls = g==null ? 'neu-color' : g>=0 ? 'up-color' : 'down-color';
-  const already = apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && a.pyeongs.includes(discPyeong));
+  const already = apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && (a.dong||'')===(r.dong||'') && a.pyeongs.includes(discPyeong));
   const rd = r.regionDiff==null ? '' : `· <span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`;
   return `<div class="disc-row">
     <div class="disc-rank">${rank}</div>
     <div class="disc-main">
-      <div class="disc-name">${escapeHtml(r.name)} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
+      <div class="disc-name">${escapeHtml(r.name)}${r.dong?` <span class="disc-dong">${escapeHtml(r.dong)}</span>`:''} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
       <div class="disc-meta">최근 ${formatPrice(r.latest)} · ${r.count}건 · ${r.avg.toLocaleString()}만/평 ${rd}</div>
     </div>
     <div class="disc-growth ${gCls}">${gStr}</div>
@@ -1251,12 +1262,12 @@ function addFromDiscover(idx){
   if(!row) return;
   if(apartments.length>=10){ toast('⚠ 아파트는 최대 10개까지 추가할 수 있어요', 3500); return; }
   const region=REGIONS.find(r=>r.code===discGu);
-  if(apartments.some(a=>a.lawdCd===discGu && a.aptName===row.name && a.pyeongs.includes(discPyeong))){
+  if(apartments.some(a=>a.lawdCd===discGu && a.aptName===row.name && (a.dong||'')===(row.dong||'') && a.pyeongs.includes(discPyeong))){
     toast('⚠ 이미 추가된 아파트·평형이에요', 3000); return;
   }
   const regionAll=discCache[`${discGu}_${currentPeriod}`];
   if(!regionAll){ toast('⚠ 데이터가 없어요, 다시 시도해주세요'); return; }
-  const apt=commitApt(region, row.name, [discPyeong], regionAll);
+  const apt=commitApt(region, row.name, row.dong, [discPyeong], regionAll);
   if(!apt){ toast('⚠ 추가 실패'); return; }
   renderGrid();
   toast(`✅ ${row.name} 관심목록 추가!`);
@@ -1378,7 +1389,7 @@ function renderChart() {
       color: CHART_COLORS[i % CHART_COLORS.length],
       dashed: false,
       label: escapeHtml(sameAptCount > 1 || selectedAptIds.some(s => s.aptId !== sel.aptId && apartments.find(a=>a.id===s.aptId)?.aptName === apt?.aptName)
-        ? `${apt?.aptName} ${PYEONG_DEFS[sel.pyeong]?.label||''}`
+        ? `${apt?.aptName}${apt?.dong?' '+apt.dong:''} ${PYEONG_DEFS[sel.pyeong]?.label||''}`.trim()
         : apt?.aptName || ''),
     };
   });
@@ -1763,7 +1774,7 @@ function openDetail(aptId){
     lastSeen[aptId]=new Set(allTxs.map(t=>t.id));saveSeen();renderGrid();
   }
   document.getElementById('sheet-title').textContent=apt.aptName;
-  document.getElementById('sheet-sub').textContent=`${apt.regionName} · 최근 ${currentPeriod>=12?(currentPeriod/12)+'년':currentPeriod+'개월'} 실거래`;
+  document.getElementById('sheet-sub').textContent=`${apt.regionName}${apt.dong?' '+apt.dong:''} · 최근 ${periodLabel(currentPeriod)} 실거래`;
   document.getElementById('detail-tabs').innerHTML=apt.pyeongs.map(p=>
     `<button class="detail-tab${p===apt.pyeongs[0]?' active':''}" onclick="switchDetailTab('${p}',this)">${PYEONG_DEFS[p].label}</button>`
   ).join('');

@@ -76,6 +76,18 @@ test('normalizeName — 공백/괄호/하이픈 제거 + 소문자', () => {
   assert.equal(L.normalizeName('래미안 개포-루체하임 (1동)'), '래미안개포루체하임1동');
 });
 
+test('sameApt / aptGroupKey — 이름+동 구분', () => {
+  const tx = { aptName: '삼성', dong: '대치동' };
+  assert.equal(L.sameApt(tx, '삼성', '대치동'), true);
+  assert.equal(L.sameApt(tx, '삼성', '삼성동'), false);   // 같은 이름 다른 동
+  assert.equal(L.sameApt(tx, '현대', '대치동'), false);   // 다른 이름
+  assert.equal(L.sameApt(tx, '삼성', ''), true);          // 동 미지정(하위호환) → 이름만
+  assert.equal(L.sameApt(tx, '삼성'), true);              // 동 undefined → 이름만
+  // 그룹키: 이름 같아도 동 다르면 다른 키
+  assert.notEqual(L.aptGroupKey('삼성', '대치동'), L.aptGroupKey('삼성', '삼성동'));
+  assert.equal(L.aptGroupKey('삼성', '대치동'), L.aptGroupKey('삼성', '대치동'));
+});
+
 test('matchByName — 부분일치 우선, 폴백 정규화', () => {
   const txs = [
     { aptName: '헬리오시티' },

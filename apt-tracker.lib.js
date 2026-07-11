@@ -109,6 +109,17 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ESC[c]; });
   }
 
+  // 단지 그룹 키: 이름 + 법정동 (동명 아파트를 물리적으로 분리)
+  function aptGroupKey(name, dong) {
+    return String(name || '') + '' + String(dong || '');
+  }
+  // tx 가 (이름,동) 단지에 해당하는지. dong 미지정(구버전 저장·수동입력)이면 이름만 비교(하위호환).
+  function sameApt(tx, name, dong) {
+    if (tx.aptName !== name) return false;
+    if (!dong) return true;
+    return (tx.dong || '') === dong;
+  }
+
   // 부분일치 우선, 없으면 정규화 후 양방향 포함 매칭
   function matchByName(txs, name) {
     var matched = txs.filter(function (tx) { return tx.aptName.indexOf(name) !== -1; });
@@ -193,6 +204,8 @@
     avgPyeongPrice: avgPyeongPrice,
     normalizeName: normalizeName,
     escapeHtml: escapeHtml,
+    aptGroupKey: aptGroupKey,
+    sameApt: sameApt,
     matchByName: matchByName,
     bucketByPyeong: bucketByPyeong,
     growthRate: growthRate
