@@ -223,3 +223,13 @@ test('bucketByPyeong — 구간 경계 + 날짜 내림차순', () => {
   assert.equal(L.bucketByPyeong(txs, '10').length, 1);
   assert.equal(L.bucketByPyeong(txs, '99').length, 0); // 없는 키
 });
+
+test('평형 경계 — 전용 74~75㎡ 는 30평대(20평대 아님)', () => {
+  const mk = a => ({ area: a, year: '2024', month: '01', day: '01', price: 1 });
+  const txs = [mk(59.97), mk(72), mk(74), mk(75.99), mk(84.99), mk(99), mk(109.98)];
+  const p20 = L.bucketByPyeong(txs, '20').map(t => t.area);
+  const p30 = L.bucketByPyeong(txs, '30').map(t => t.area);
+  assert.deepEqual(p20.sort((a, b) => a - b), [59.97, 72]);       // 73 미만
+  assert.deepEqual(p30.sort((a, b) => a - b), [74, 75.99, 84.99]); // 73~98 (75.9 포함!)
+  assert.equal(L.bucketByPyeong(txs, '40').map(t => t.area).sort((a, b) => a - b).join(','), '99,109.98');
+});
