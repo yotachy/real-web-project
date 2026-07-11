@@ -254,7 +254,7 @@
   .card-price-row>.card-price-date{margin-left:auto;}
   .card-price-date.muted{font-size:11px;font-weight:500;color:var(--muted);}
   /* ── 반응형: PC · 태블릿 · 모바일 · 폴드 정교 대응 ── */
-  @media(max-width:1024px){ .main-layout{gap:14px;grid-template-columns:minmax(280px,330px) 1fr;} }
+  @media(min-width:901px) and (max-width:1024px){ .main-layout{gap:14px;grid-template-columns:minmax(280px,330px) 1fr;} }
   @media(max-width:900px){ #dashboard-screen{padding:18px 16px 72px;} }
   @media(max-width:640px){
     #dashboard-screen{padding:16px 12px 76px;}
@@ -1649,6 +1649,14 @@ function selectCard(aptId, pyeong) {
   document.getElementById('chart-tabs').innerHTML = '';
   renderChart();
 }
+
+// 뷰포트 폭 변화(회전·창크기) 시 차트 재렌더 — SVG 는 렌더 시점 clientWidth 기준이라
+// 폭이 커지면 레터박스(빈 여백)가 생김. 재렌더로 항상 꽉 차게.
+var _chartResizeTimer=null;
+window.addEventListener('resize', function(){
+  clearTimeout(_chartResizeTimer);
+  _chartResizeTimer=setTimeout(function(){ if(typeof selectedAptIds!=='undefined' && selectedAptIds.length) renderChart(); }, 160);
+});
 
 function renderChart() {
   const wrap = document.getElementById('chart-svg-wrap');
