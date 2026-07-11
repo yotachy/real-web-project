@@ -161,7 +161,8 @@
   .tx-detail{font-size:12px;color:var(--muted);margin-top:2px;}
   .tx-price{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;text-align:right;}
   .tx-diff{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:2px;text-align:right;}
-  .tx-no{color:var(--muted);text-align:center;padding:40px 0;font-size:13px;}
+  .tx-no{color:var(--muted);text-align:center;padding:40px 0;font-size:13px;line-height:1.7;}
+  .tx-no b{color:var(--text);font-weight:700;}
   .state-empty{text-align:center;padding:80px 20px;color:var(--muted);}
   .card-loading{text-align:center;padding:28px 0;color:var(--muted);font-size:13px;}
   .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;}
@@ -1225,12 +1226,21 @@ function renderDiscover(){
     rows.sort((a,b)=>b.avg-a.avg);
   }
   discShown=rows.slice(0,30);
-  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
-    : discSort==='count' ? '거래량순' : '평단가순';
+  let sortNote;
+  if(discSort==='growth') sortNote = currentPeriod<=3
+    ? '상승률(추세)은 관측 3개월↑ 단지만 — 3개월 조회는 결과가 적어요, 기간 늘리기 권장'
+    : '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)';
+  else sortNote = discSort==='count' ? '거래량순' : '평단가순';
   noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
   if(!discShown.length){
-    const extra = discSort==='growth' ? ' 조회 기간을 늘려보세요.' : '';
-    resultsEl.innerHTML=`<div class="tx-no">조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).${extra}</div>`;
+    let msg;
+    if(discSort==='growth' && currentPeriod<=3)
+      msg='3개월 조회에선 상승률(추세)이 나오는 단지가 드물어요.<br>추세는 <b>서로 다른 3개월 이상</b> 거래된 단지에서만 계산됩니다.<br>조회 기간을 <b>6개월·1년</b>으로 늘려보세요.';
+    else if(discSort==='growth')
+      msg='이 조건에 맞는 단지가 없어요 (관측 3개월 이상 거래 필요).<br>다른 평형·구를 선택하거나 기간을 늘려보세요.';
+    else
+      msg='조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).';
+    resultsEl.innerHTML=`<div class="tx-no">${msg}</div>`;
     return;
   }
   resultsEl.innerHTML=discShown.map((r,i)=>discRowHtml(r, i, i+1)).join('');
