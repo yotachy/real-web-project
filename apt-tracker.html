@@ -277,7 +277,12 @@
   .disc-main{min-width:0;}
   .disc-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
+  /* 정렬 기준 강조 지표 (오른쪽 큰 값 + 라벨) */
+  .disc-metric{display:flex;flex-direction:column;align-items:flex-end;white-space:nowrap;}
+  .disc-metric-val{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:800;line-height:1.1;}
+  .disc-metric-val.accent-color{color:var(--accent);}
+  .disc-metric-lbl{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.4px;margin-top:2px;}
+  .disc-unit{font-size:10px;font-weight:600;color:var(--muted2);margin-left:1px;}
   .disc-dong,.ac-dong{font-size:11px;font-weight:500;color:var(--muted);}
   /* 저/중/고층 태그 (절대 층수 근사) — 저층 파랑·중층 회색·고층 골드 */
   .floor-tier{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;vertical-align:middle;margin-left:3px;}
@@ -301,7 +306,8 @@
   .disc-add:disabled{background:var(--card2);color:var(--muted);cursor:default;border:1px solid var(--border);}
   @media(max-width:560px){
     .disc-row{grid-template-columns:26px 1fr auto;gap:8px 10px;}
-    .disc-growth{grid-column:2;grid-row:2;justify-self:start;font-size:13px;}
+    .disc-metric{grid-column:2;grid-row:2;align-items:flex-start;flex-direction:row;gap:5px;}
+    .disc-metric-lbl{margin-top:0;align-self:center;}
     .disc-add{grid-column:3;grid-row:1/3;align-self:center;}
   }
   /* 키보드 포커스 가시성 */
@@ -1278,18 +1284,34 @@ function computeAndRenderDiscover(){
 
 // 한 행 렌더 (idx=discShown 내 위치, rank=표시순위)
 function discRowHtml(r, idx, rank){
-  const g=r.growth;
-  const gStr = g==null ? '-' : `${g>=0?'+':''}${g.toFixed(1)}%`;
-  const gCls = g==null ? 'neu-color' : g>=0 ? 'up-color' : 'down-color';
   const already = apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && (a.dong||'')===(r.dong||'') && a.pyeongs.includes(discPyeong));
-  const rd = r.regionDiff==null ? '' : `· <span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`;
+  const g=r.growth;
+  const gTxt = g==null ? '-' : `${g>=0?'+':''}${g.toFixed(1)}%`;
+  const gCls = g==null ? 'neu-color' : g>=0 ? 'up-color' : 'down-color';
+
+  // 정렬 기준 지표를 오른쪽에 크게 강조 (라벨 포함)
+  let primVal, primLbl, primCls='accent-color';
+  if(discSort==='avg'){ primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
+  else if(discSort==='count'){ primVal=`${r.count}<span class="disc-unit">건</span>`; primLbl='거래량'; }
+  else { primVal=gTxt; primLbl='상승률'; primCls=gCls; }
+
+  // 메타: 정렬 기준 제외한 보조 지표만
+  const meta=[`최근 ${formatPrice(r.latest)}`];
+  if(discSort!=='count') meta.push(`${r.count}건`);
+  if(discSort!=='avg') meta.push(`${r.avg.toLocaleString()}만/평`);
+  if(discSort!=='growth' && g!=null) meta.push(`<span class="${gCls}">${gTxt}</span>`);
+  if(r.regionDiff!=null) meta.push(`<span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`);
+
   return `<div class="disc-row">
     <div class="disc-rank">${rank}</div>
     <div class="disc-main">
       <div class="disc-name">${escapeHtml(r.name)}${r.dong?` <span class="disc-dong">${escapeHtml(r.dong)}</span>`:''} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
-      <div class="disc-meta">최근 ${formatPrice(r.latest)} · ${r.count}건 · ${r.avg.toLocaleString()}만/평 ${rd}</div>
+      <div class="disc-meta">${meta.join(' · ')}</div>
     </div>
-    <div class="disc-growth ${gCls}">${gStr}</div>
+    <div class="disc-metric">
+      <div class="disc-metric-val ${primCls}">${primVal}</div>
+      <div class="disc-metric-lbl">${primLbl}</div>
+    </div>
     <button class="disc-add" ${already?'disabled':''} onclick="addFromDiscover(${idx})">${already?'추가됨':'＋관심'}</button>
   </div>`;
 }
