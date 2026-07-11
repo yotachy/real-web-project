@@ -406,11 +406,8 @@
             <label class="region-avg-toggle" title="선택 단지가 속한 구 전체의 동일 평형 월평균 실거래가 추이">
               <input type="checkbox" id="region-avg-check" onchange="onRegionAvgChange()"> 구 평균
             </label>
-            <label class="region-avg-toggle" title="관심목록 중 그 구·평형 단지들의 월평균 실거래가 추이">
-              <input type="checkbox" id="watch-avg-check" onchange="onWatchAvgChange()"> 관심 평균
-            </label>
-            <label class="region-avg-toggle" title="추세선만 선명하게, 나머지 선은 희미하게">
-              <input type="checkbox" id="trend-only-check" onchange="onTrendOnlyChange()"> 추세선만
+            <label class="region-avg-toggle" title="관심단지 추세선만 선명하게, 나머지 선은 희미하게">
+              <input type="checkbox" id="trend-only-check" onchange="onTrendOnlyChange()"> 관심단지 추세선만
             </label>
           </div>
         </div>
@@ -600,8 +597,7 @@ let apartments=[], transactions={}, newCounts={}, lastSeen={}, isRefreshing=fals
 let regionAvg={};   // lawdCd -> { 평형키 -> 지역 평균 평단가(만원/평) }  (지역평균 대비용)
 let regionData={};  // lawdCd -> regionAll(전체 거래)  (차트 '구 평균 추이'용)
 let showRegionAvg=false;   // 차트에 구 전체 평균 추이 표시 여부
-let showWatchAvg=false;    // 차트에 관심목록(그 구+평형) 평균 추이 표시 여부
-let trendOnly=false;       // '추세선만': 추세선 강조 + 나머지 선 희미하게
+let trendOnly=false;       // '관심단지 추세선만': 추세선 강조 + 나머지 선 희미하게
 // 지역 전체 거래(regionAll)에서 평형별 평균 평단가 산출 + 원본 보관
 function computeRegionAvg(lawdCd, regionAll){
   regionData[lawdCd]=regionAll;
@@ -621,28 +617,9 @@ function regionMonthlyAvg(lawdCd, pyeong){
     price:Math.round(byMonth[k].s/byMonth[k].n), floor:'평균', area:0
   }));
 }
-// 관심목록 중 그 구+평형 단지들의 월별 평균 실거래가 → 차트 시리즈용 tx 배열
-function watchlistMonthlyAvg(lawdCd, pyeong){
-  const byMonth={};
-  apartments.forEach(a=>{
-    if(a.lawdCd!==lawdCd || !a.pyeongs.includes(pyeong)) return;
-    ((transactions[a.id]||{})[pyeong]||[]).forEach(t=>{
-      const k=t.year+t.month; if(!byMonth[k])byMonth[k]={s:0,n:0}; byMonth[k].s+=t.price; byMonth[k].n++;
-    });
-  });
-  return Object.keys(byMonth).sort().map(k=>({
-    year:k.slice(0,4), month:k.slice(4,6), day:'15',
-    price:Math.round(byMonth[k].s/byMonth[k].n), floor:'평균', area:0
-  }));
-}
 function onRegionAvgChange(){
   showRegionAvg=document.getElementById('region-avg-check').checked;
   try{ localStorage.setItem('apt_region_avg', showRegionAvg?'1':'0'); }catch(e){}
-  if(selectedAptIds.length) renderChart();
-}
-function onWatchAvgChange(){
-  showWatchAvg=document.getElementById('watch-avg-check').checked;
-  try{ localStorage.setItem('apt_watch_avg', showWatchAvg?'1':'0'); }catch(e){}
   if(selectedAptIds.length) renderChart();
 }
 function onTrendOnlyChange(){
@@ -1530,9 +1507,15 @@ function selectCard(aptId, pyeong) {
   document.getElementById('chart-empty').style.display = 'none';
   document.getElementById('chart-content').style.display = 'flex';
 
-  // 헤더 텍스트
-  const names = [...new Set(selectedAptIds.map(sel => apartments.find(a=>a.id===sel.aptId)?.aptName || '').filter(Boolean))];
-  document.getElementById('chart-apt-name').textContent = names.join(' vs ');
+  // 헤더 텍스트 — 단지명을 각 차트 선 색상으로
+  const nameColor = {};
+  selectedAptIds.forEach((sel, i) => {
+    const apt = apartments.find(a => a.id === sel.aptId);
+    if (apt && apt.aptName && !(apt.aptName in nameColor)) nameColor[apt.aptName] = CHART_COLORS[i % CHART_COLORS.length].line;
+  });
+  document.getElementById('chart-apt-name').innerHTML = Object.keys(nameColor)
+    .map(n => `<span style="color:${nameColor[n]}">${escapeHtml(n)}</span>`)
+    .join('<span style="color:var(--muted);font-weight:400"> vs </span>');
   document.getElementById('chart-apt-sub').textContent = `최근 ${periodLabel(currentPeriod)} 실거래 비교`;
 
   // 비교 힌트
@@ -1566,31 +1549,26 @@ function renderChart() {
     };
   });
 
-  // 평균 추이 시리즈 (구 전체 / 관심목록) — 회색 벤치마크 + 지역명 라벨
-  function pushAvgSeries(isWatch) {
+  // 구 평균 추이 시리즈 (선택 단지의 구+평형별 월평균) — 회색 벤치마크 + 지역명 라벨
+  if (showRegionAvg) {
     const seen = new Set();
     selectedAptIds.forEach(sel => {
       const apt = apartments.find(a => a.id === sel.aptId);
       if (!apt) return;
       const key = apt.lawdCd + '_' + sel.pyeong;
       if (seen.has(key)) return; seen.add(key);
-      const avgTxs = isWatch ? watchlistMonthlyAvg(apt.lawdCd, sel.pyeong) : regionMonthlyAvg(apt.lawdCd, sel.pyeong);
+      const avgTxs = regionMonthlyAvg(apt.lawdCd, sel.pyeong);
       if (avgTxs.length >= 2) {
         const gu = (apt.regionName || '').split(' ').pop();
-        const pl = PYEONG_DEFS[sel.pyeong]?.label || '';
         series.push({
-          id: (isWatch ? 'wavg_' : 'avg_') + key, apt: null, pyeong: sel.pyeong, txs: avgTxs,
-          isAvg: true, isWatchAvg: isWatch,
-          color: isWatch ? { line: '#8aa0c8', area: 'transparent' } : { line: '#8a94a6', area: 'rgba(138,148,166,0.10)' },
-          dashed: isWatch,
-          label: isWatch ? `관심 ${gu} ${pl}` : `${gu} ${pl} 평균`,
-          endLabel: isWatch ? `관심 ${gu}` : `${gu} 평균`
+          id: 'avg_' + key, apt: null, pyeong: sel.pyeong, txs: avgTxs, isAvg: true,
+          color: { line: '#8a94a6', area: 'rgba(138,148,166,0.10)' }, dashed: false,
+          label: `${gu} ${PYEONG_DEFS[sel.pyeong]?.label || ''} 평균`,
+          endLabel: `${gu} 평균`
         });
       }
     });
   }
-  if (showRegionAvg) pushAvgSeries(false);
-  if (showWatchAvg) pushAvgSeries(true);
 
   const allTxs = series.flatMap(s => s.txs);
   if (!allTxs.length) {
@@ -2084,10 +2062,9 @@ document.addEventListener('keydown', e => {
   let density='compact';
   try{ density=localStorage.getItem('apt_density')||'compact'; }catch(e){}
   setDensity(density);
-  // 구/관심 평균·추세선만 표시 복원
-  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; showWatchAvg=localStorage.getItem('apt_watch_avg')==='1'; trendOnly=localStorage.getItem('apt_trend_only')==='1'; }catch(e){}
+  // 구 평균·추세선만 표시 복원
+  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; trendOnly=localStorage.getItem('apt_trend_only')==='1'; }catch(e){}
   const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
-  const _wac=document.getElementById('watch-avg-check'); if(_wac) _wac.checked=showWatchAvg;
   const _toc=document.getElementById('trend-only-check'); if(_toc) _toc.checked=trendOnly;
   if(apartments.length>0) refreshAll();
 })();
