@@ -17,7 +17,7 @@
   .header-title{font-size:20px;font-weight:900;}.header-title span{color:var(--accent);}
   .header-sub{font-size:11px;color:var(--muted);margin-top:3px;}
   /* 평형 그룹 카드 영역 */
-  .pyeong-groups{display:flex;flex-direction:column;gap:0;margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+  .pyeong-groups{grid-area:cards;min-width:0;display:flex;flex-direction:column;gap:0;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
   .pyeong-group-row{display:flex;align-items:stretch;border-bottom:1px solid var(--border);}
   .pyeong-group-row:last-child{border-bottom:none;}
   .pyeong-group-label{width:88px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--accent);background:#09111e;border-right:2px solid var(--accent-dim);padding:12px 8px;text-align:center;letter-spacing:0.5px;}
@@ -28,10 +28,11 @@
   .apt-card{background:#0b1220;border:1.5px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .2s,box-shadow .15s;padding:12px 14px;min-width:200px;max-width:240px;flex-shrink:0;animation:fadeUp .3s ease both;position:relative;}
   .apt-card:hover{border-color:var(--border2);box-shadow:0 4px 16px rgba(0,0,0,.3);}
   /* 메인 2단 레이아웃 */
-  .main-layout{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start;}
-  .left-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;min-height:400px;}
+  /* 좌: 카드(cards)+광고(ads) / 우: 차트(chart, 세로 스팬·고정) */
+  .main-layout{display:grid;grid-template-columns:1fr minmax(440px,600px);grid-template-areas:"cards chart" "ads chart";gap:16px;align-items:start;}
+  .left-panel{grid-area:ads;background:var(--card);border:1px solid var(--border);border-radius:14px;}
   /* 우측 차트 패널 */
-  .chart-panel{background:var(--card);border:1px solid var(--border);border-radius:16px;position:sticky;top:20px;min-height:560px;display:flex;flex-direction:column;}
+  .chart-panel{grid-area:chart;min-width:0;background:var(--card);border:1px solid var(--border);border-radius:16px;position:sticky;top:16px;min-height:560px;display:flex;flex-direction:column;}
   .chart-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--muted);gap:12px;}
   .chart-panel-empty-icon{font-size:40px;}
   .chart-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);}
@@ -62,7 +63,7 @@
   .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
-  @media(max-width:900px){.main-layout{grid-template-columns:1fr;}.chart-panel{position:static;min-height:360px;}.card-list{max-height:none;}}
+  @media(max-width:900px){.main-layout{grid-template-columns:1fr;grid-template-areas:"cards" "chart" "ads";}.chart-panel{position:static;min-height:360px;}.card-list{max-height:none;}}
   /* 카드 헤더/바디 */
   .card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
   .card-apt-name{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px;line-height:1.3;}
@@ -294,7 +295,7 @@
   .apt-card:focus:not(:focus-visible),.card-icon-btn:focus:not(:focus-visible),
   .period-btn:focus:not(:focus-visible),.chart-tab:focus:not(:focus-visible){outline:none;}
   /* 모바일: 광고 패널을 차트 아래로 (order) */
-  @media(max-width:900px){.chart-panel{order:1;}.left-panel{order:2;min-height:0;}}
+  @media(max-width:900px){.left-panel{min-height:0;}}
   /* 사용자 모션 최소화 선호 존중 */
   @media(prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important;}
@@ -336,15 +337,14 @@
   </div>
 
   <div id="watch-view">
-  <!-- 평형 그룹 카드 영역 -->
-  <div class="pyeong-groups" id="pyeong-groups">
-    <div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
-      + 아파트 추가 버튼으로 관심 아파트를 추가하세요
-    </div>
-  </div>
-
-  <!-- 메인 하단 -->
+  <!-- 좌: 카드(위)+광고(아래) / 우: 차트(고정) 2단 -->
   <div class="main-layout">
+    <!-- 평형 그룹 카드 영역 -->
+    <div class="pyeong-groups" id="pyeong-groups">
+      <div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
+        + 아파트 추가 버튼으로 관심 아파트를 추가하세요
+      </div>
+    </div>
     <div class="left-panel" id="left-panel">
       <!-- Google AdSense 광고 영역 -->
       <div style="padding:16px 14px;border-bottom:1px solid var(--border);">
