@@ -51,7 +51,8 @@
   .chart-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--muted);gap:12px;}
   .chart-panel-empty-icon{font-size:40px;}
   .chart-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
-  .region-avg-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted2);cursor:pointer;white-space:nowrap;flex-shrink:0;}
+  .avg-toggles{display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0;}
+  .region-avg-toggle{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted2);cursor:pointer;white-space:nowrap;}
   .region-avg-toggle input{accent-color:var(--accent);cursor:pointer;}
   .chart-apt-name{font-size:16px;font-weight:700;}
   .chart-apt-sub{font-size:12px;color:var(--muted);margin-top:3px;}
@@ -398,9 +399,14 @@
             <div class="chart-apt-name" id="chart-apt-name">-</div>
             <div class="chart-apt-sub" id="chart-apt-sub">-</div>
           </div>
-          <label class="region-avg-toggle" title="선택 단지가 속한 구·평형의 월별 평균 실거래가 추이를 함께 표시">
-            <input type="checkbox" id="region-avg-check" onchange="onRegionAvgChange()"> 구 평균
-          </label>
+          <div class="avg-toggles">
+            <label class="region-avg-toggle" title="선택 단지가 속한 구 전체의 동일 평형 월평균 실거래가 추이">
+              <input type="checkbox" id="region-avg-check" onchange="onRegionAvgChange()"> 구 평균
+            </label>
+            <label class="region-avg-toggle" title="관심목록 중 그 구·평형 단지들의 월평균 실거래가 추이">
+              <input type="checkbox" id="watch-avg-check" onchange="onWatchAvgChange()"> 관심 평균
+            </label>
+          </div>
         </div>
         <div class="chart-tabs" id="chart-tabs"></div>
         <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 최대 5개까지 비교할 수 있어요</div>
@@ -587,7 +593,8 @@ const CITIES = [...new Set(REGIONS.map(r => r.city))];
 let apartments=[], transactions={}, newCounts={}, lastSeen={}, isRefreshing=false, selectedPyeongs=[];
 let regionAvg={};   // lawdCd -> { 평형키 -> 지역 평균 평단가(만원/평) }  (지역평균 대비용)
 let regionData={};  // lawdCd -> regionAll(전체 거래)  (차트 '구 평균 추이'용)
-let showRegionAvg=false;   // 차트에 구 평균 추이 표시 여부
+let showRegionAvg=false;   // 차트에 구 전체 평균 추이 표시 여부
+let showWatchAvg=false;    // 차트에 관심목록(그 구+평형) 평균 추이 표시 여부
 // 지역 전체 거래(regionAll)에서 평형별 평균 평단가 산출 + 원본 보관
 function computeRegionAvg(lawdCd, regionAll){
   regionData[lawdCd]=regionAll;
@@ -607,9 +614,28 @@ function regionMonthlyAvg(lawdCd, pyeong){
     price:Math.round(byMonth[k].s/byMonth[k].n), floor:'평균', area:0
   }));
 }
+// 관심목록 중 그 구+평형 단지들의 월별 평균 실거래가 → 차트 시리즈용 tx 배열
+function watchlistMonthlyAvg(lawdCd, pyeong){
+  const byMonth={};
+  apartments.forEach(a=>{
+    if(a.lawdCd!==lawdCd || !a.pyeongs.includes(pyeong)) return;
+    ((transactions[a.id]||{})[pyeong]||[]).forEach(t=>{
+      const k=t.year+t.month; if(!byMonth[k])byMonth[k]={s:0,n:0}; byMonth[k].s+=t.price; byMonth[k].n++;
+    });
+  });
+  return Object.keys(byMonth).sort().map(k=>({
+    year:k.slice(0,4), month:k.slice(4,6), day:'15',
+    price:Math.round(byMonth[k].s/byMonth[k].n), floor:'평균', area:0
+  }));
+}
 function onRegionAvgChange(){
   showRegionAvg=document.getElementById('region-avg-check').checked;
   try{ localStorage.setItem('apt_region_avg', showRegionAvg?'1':'0'); }catch(e){}
+  if(selectedAptIds.length) renderChart();
+}
+function onWatchAvgChange(){
+  showWatchAvg=document.getElementById('watch-avg-check').checked;
+  try{ localStorage.setItem('apt_watch_avg', showWatchAvg?'1':'0'); }catch(e){}
   if(selectedAptIds.length) renderChart();
 }
 let selectedAptIds = []; // [{aptId, pyeong}]
@@ -1528,24 +1554,31 @@ function renderChart() {
     };
   });
 
-  // 구 평균 추이 시리즈 (선택 단지의 구+평형별 월평균 실거래가) — 회색 벤치마크
-  if (showRegionAvg) {
+  // 평균 추이 시리즈 (구 전체 / 관심목록) — 회색 벤치마크 + 지역명 라벨
+  function pushAvgSeries(isWatch) {
     const seen = new Set();
     selectedAptIds.forEach(sel => {
       const apt = apartments.find(a => a.id === sel.aptId);
       if (!apt) return;
       const key = apt.lawdCd + '_' + sel.pyeong;
       if (seen.has(key)) return; seen.add(key);
-      const avgTxs = regionMonthlyAvg(apt.lawdCd, sel.pyeong);
+      const avgTxs = isWatch ? watchlistMonthlyAvg(apt.lawdCd, sel.pyeong) : regionMonthlyAvg(apt.lawdCd, sel.pyeong);
       if (avgTxs.length >= 2) {
+        const gu = (apt.regionName || '').split(' ').pop();
+        const pl = PYEONG_DEFS[sel.pyeong]?.label || '';
         series.push({
-          id: 'avg_' + key, apt: null, pyeong: sel.pyeong, txs: avgTxs, isAvg: true,
-          color: { line: '#8a94a6', area: 'rgba(138,148,166,0.10)' }, dashed: false,
-          label: `${(apt.regionName || '').split(' ').pop()} ${PYEONG_DEFS[sel.pyeong]?.label || ''} 평균`
+          id: (isWatch ? 'wavg_' : 'avg_') + key, apt: null, pyeong: sel.pyeong, txs: avgTxs,
+          isAvg: true, isWatchAvg: isWatch,
+          color: isWatch ? { line: '#8aa0c8', area: 'transparent' } : { line: '#8a94a6', area: 'rgba(138,148,166,0.10)' },
+          dashed: isWatch,
+          label: isWatch ? `관심 ${gu} ${pl}` : `${gu} ${pl} 평균`,
+          endLabel: isWatch ? `관심 ${gu}` : `${gu} 평균`
         });
       }
     });
   }
+  if (showRegionAvg) pushAvgSeries(false);
+  if (showWatchAvg) pushAvgSeries(true);
 
   const allTxs = series.flatMap(s => s.txs);
   if (!allTxs.length) {
@@ -1635,6 +1668,7 @@ function renderChart() {
   const paths = [];
   const dots = [];
   const trendLines = [];  // 회귀 추세선(깜빡임)
+  const avgLabels = [];   // 평균선 지역명 라벨
   const maxLabels = [];  // 최고가 라벨
 
   series.forEach((s, si) => {
@@ -1658,8 +1692,14 @@ function renderChart() {
       ? `${linePath} L${pts[pts.length-1].x.toFixed(1)},${(pad.t+ch).toFixed(1)} L${pts[0].x.toFixed(1)},${(pad.t+ch).toFixed(1)} Z`
       : '';
 
-    if (areaPath) paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
+    if (areaPath && s.color.area !== 'transparent') paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
     paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="${s.isAvg ? '2.4' : '1.6'}"${s.isAvg ? ' opacity="0.85"' : ''} stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
+
+    // 평균선 지역명 라벨(선 오른쪽 끝)
+    if (s.isAvg && pts.length) {
+      const lp = pts[pts.length - 1];
+      avgLabels.push(`<text x="${(lp.x - 4).toFixed(1)}" y="${(lp.y - 6).toFixed(1)}" text-anchor="end" fill="${c.line}" font-size="10" font-weight="700" font-family="'Noto Sans KR',sans-serif" style="paint-order:stroke" stroke="#070b14" stroke-width="3">${escapeHtml(s.endLabel)}</text>`);
+    }
 
     // ── 추세선 (좌표 선형 회귀) → 상승/횡보/하락 식별 + 깜빡이는 점선 ──
     if (pts.length >= 2 && !s.isAvg) {   // 구 평균 시리즈는 자체가 평균선이라 추세선 생략
@@ -1777,6 +1817,7 @@ function renderChart() {
       ${paths.join('')}
       ${trendLines.join('')}
       ${dots.join('')}
+      ${avgLabels.join('')}
       ${maxLabels.join('')}
       ${budgetLineEl}
       <!-- crosshair 수직선 -->
@@ -2029,9 +2070,10 @@ document.addEventListener('keydown', e => {
   let density='compact';
   try{ density=localStorage.getItem('apt_density')||'compact'; }catch(e){}
   setDensity(density);
-  // 구 평균 표시 복원
-  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; }catch(e){}
+  // 구/관심 평균 표시 복원
+  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; showWatchAvg=localStorage.getItem('apt_watch_avg')==='1'; }catch(e){}
   const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
+  const _wac=document.getElementById('watch-avg-check'); if(_wac) _wac.checked=showWatchAvg;
   if(apartments.length>0) refreshAll();
 })();
 </script>
