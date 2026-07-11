@@ -59,11 +59,15 @@ MAX_WORKERS = 10  # 동시 API 호출 수
 cache = {}
 cache_lock = threading.Lock()
 
+# 정상 API 응답인지 (WAF 차단·에러 HTML 걸러냄). 거래 0건도 resultCode 000.
+def resp_ok(body):
+    return isinstance(body, str) and '<resultCode>000' in body
+
 def cache_get(key):
     with cache_lock:
         entry = cache.get(key)
-        if entry and time.time() - entry['ts'] < CACHE_TTL:
-            return entry['data']
+        if entry and time.time() - entry['ts'] < CACHE_TTL and resp_ok(entry['data']):
+            return entry['data']   # 정상 응답만 캐시로 인정(오염분 무시)
     return None
 
 def cache_set(key, data):
@@ -84,7 +88,8 @@ def fetch_one(lawd_cd, deal_ymd):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         data = resp.read().decode('utf-8')
-    cache_set(key, data)
+    if resp_ok(data):
+        cache_set(key, data)   # 정상 응답만 캐시
     return deal_ymd, data, False
 
 class Handler(http.server.SimpleHTTPRequestHandler):

@@ -47,14 +47,20 @@ foreach (explode(',', $ymdsRaw) as $y) {
 }
 if ($lawd === '' || !$ymds) fail(400, 'LAWD_CD/YMDS 파라미터 없음');
 
-// ── 캐시 유틸 (쓰기 불가 시 조용히 무시) ─────────────────────────
+// 정상 API 응답인지 검증 (WAF 차단·에러 HTML 걸러냄). 성공은 <resultCode>000.
+// 거래 0건인 달도 resultCode 000 이므로 정상으로 인정(빈 결과 캐시 OK).
+function resp_ok($body) {
+    return is_string($body) && strpos($body, '<resultCode>000') !== false;
+}
+
+// ── 캐시 유틸 (쓰기 불가 시 조용히 무시. 오염(비정상)분은 무시하고 재조회) ──
 $cacheDir = sys_get_temp_dir() . '/apt-tracker-cache';
 function cache_path($dir, $lawd, $ymd) { return $dir . '/' . $lawd . '_' . $ymd . '.xml'; }
 function cache_get($dir, $lawd, $ymd) {
     $p = cache_path($dir, $lawd, $ymd);
     if (is_file($p) && (time() - filemtime($p)) < CACHE_TTL) {
         $d = @file_get_contents($p);
-        if ($d !== false) return $d;
+        if ($d !== false && resp_ok($d)) return $d;   // 정상 응답만 캐시로 인정
     }
     return null;
 }
@@ -63,7 +69,46 @@ function cache_set($dir, $lawd, $ymd, $data) {
     @file_put_contents(cache_path($dir, $lawd, $ymd), $data);
 }
 
-// ── 1단계: 캐시 히트 분리 + 미스분 병렬 수집 ─────────────────────
+// 여러 달을 curl_multi 로 수집하되 동시 요청을 웨이브(8)로 제한(WAF 차단 회피).
+// 정상(resp_ok)인 응답만 [ymd=>body] 로 반환.
+function fetch_months($lawd, $ymds, $apiKey) {
+    $out = [];
+    $waveSize = 8;
+    for ($i = 0; $i < count($ymds); $i += $waveSize) {
+        $wave = array_slice($ymds, $i, $waveSize);
+        $mh = curl_multi_init();
+        $handles = [];
+        foreach ($wave as $ymd) {
+            $url = API_BASE . '?serviceKey=' . $apiKey
+                 . '&LAWD_CD=' . urlencode($lawd)
+                 . '&DEAL_YMD=' . urlencode($ymd)
+                 . '&numOfRows=1000&pageNo=1';
+            $c = curl_init($url);
+            curl_setopt_array($c, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 15,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_USERAGENT      => 'Mozilla/5.0',
+            ]);
+            curl_multi_add_handle($mh, $c);
+            $handles[$ymd] = $c;
+        }
+        do {
+            $status = curl_multi_exec($mh, $running);
+            if ($running) curl_multi_select($mh, 1.0);
+        } while ($running && $status === CURLM_OK);
+        foreach ($handles as $ymd => $c) {
+            $body = curl_multi_getcontent($c);
+            curl_multi_remove_handle($mh, $c);
+            curl_close($c);
+            if (resp_ok($body)) $out[$ymd] = $body;   // 정상만 채택(에러는 버림)
+        }
+        curl_multi_close($mh);
+    }
+    return $out;
+}
+
+// ── 1단계: 캐시 히트 분리 + 미스분 수집(웨이브 + 실패 재시도) ──────
 $rawMap = [];
 $toFetch = [];
 foreach ($ymds as $ymd) {
@@ -73,36 +118,19 @@ foreach ($ymds as $ymd) {
 }
 
 if ($toFetch) {
-    $mh = curl_multi_init();
-    $handles = [];
-    foreach ($toFetch as $ymd) {
-        $url = API_BASE . '?serviceKey=' . $API_KEY
-             . '&LAWD_CD=' . urlencode($lawd)
-             . '&DEAL_YMD=' . urlencode($ymd)
-             . '&numOfRows=1000&pageNo=1';
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0',
-        ]);
-        curl_multi_add_handle($mh, $ch);
-        $handles[$ymd] = $ch;
+    $got = fetch_months($lawd, $toFetch, $API_KEY);
+    // 실패(차단 등)한 달 1회 재시도
+    $failed = array_values(array_diff($toFetch, array_keys($got)));
+    if ($failed) {
+        usleep(400000); // 0.4s
+        foreach (fetch_months($lawd, $failed, $API_KEY) as $ymd => $b) $got[$ymd] = $b;
     }
-    do {
-        $status = curl_multi_exec($mh, $running);
-        if ($running) curl_multi_select($mh, 1.0);
-    } while ($running && $status === CURLM_OK);
-
-    foreach ($handles as $ymd => $ch) {
-        $body = curl_multi_getcontent($ch);
-        curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
-        $rawMap[$ymd] = ($body === false || $body === null) ? '' : $body;
-        if ($rawMap[$ymd] !== '') cache_set($cacheDir, $lawd, $ymd, $rawMap[$ymd]);
+    foreach ($got as $ymd => $body) {
+        $rawMap[$ymd] = $body;
+        cache_set($cacheDir, $lawd, $ymd, $body);   // 정상만 캐시
     }
-    curl_multi_close($mh);
+    // 끝내 실패한 달은 빈 결과(오염 캐시 남기지 않음)
+    foreach ($toFetch as $ymd) { if (!isset($rawMap[$ymd])) $rawMap[$ymd] = ''; }
 }
 
 // ── 2단계: XML slim 파싱 (parse_slim 대응) ───────────────────────
