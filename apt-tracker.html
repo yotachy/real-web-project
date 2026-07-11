@@ -263,6 +263,8 @@
   .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
   .disc-dong,.ac-dong{font-size:11px;font-weight:500;color:var(--muted);}
+  /* 저/중/고층 태그 (절대 층수 근사) */
+  .floor-tier{display:inline-block;font-size:9px;font-weight:700;padding:0 5px;border-radius:99px;border:1px solid var(--border2);color:var(--muted2);vertical-align:middle;margin-left:2px;}
   /* 아파트 추가 모달: 크게 + 시/도·구/군 2열 + 자주선택 pill */
   .modal-box-lg{max-width:560px;}
   .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
@@ -942,7 +944,8 @@ function renderQuickPills(){
   const el=document.getElementById('quick-region-pills'); if(!el) return;
   el.innerHTML='<span class="quick-pills-label">자주 선택</span>'+topRegionPills(5).map(c=>{
     const r=REGIONS.find(x=>x.code===c); if(!r) return '';
-    return `<button class="quick-pill" onclick="pickRegionPill('${c}')">${escapeHtml(r.name)}</button>`;
+    // 구/군만 짧게 (r.gu, 예: '강남구' · '성남시 분당구'). title 에 전체 지역명.
+    return `<button class="quick-pill" title="${escapeHtml(r.name)}" onclick="pickRegionPill('${c}')">${escapeHtml(r.gu)}</button>`;
   }).join('');
 }
 function pickRegionPill(code){
@@ -1705,9 +1708,9 @@ function renderTxList(series) {
       <div class="tx-item-bar" style="background:${isMulti ? color.line : 'transparent'}"></div>
       <div class="tx-item-info">
         <div class="tx-item-name" style="color:${isMulti ? color.line : 'var(--text)'}">
-          ${isMulti ? label : `${tx.floor}층`}
+          ${isMulti ? label : `${tx.floor}층${floorTier(tx.floor)?` <span class="floor-tier">${floorTier(tx.floor)}</span>`:''}`}
         </div>
-        <div class="tx-item-meta">${fmtDate(tx.year, tx.month, tx.day)}</div>
+        <div class="tx-item-meta">${fmtDate(tx.year, tx.month, tx.day)}${isMulti && floorTier(tx.floor)?` · ${tx.floor}층 ${floorTier(tx.floor)}`:''}</div>
       </div>
       <div class="tx-item-price" style="color:${isMulti ? color.line : 'var(--text)'}">
         ${formatPrice(tx.price)}
@@ -1859,7 +1862,7 @@ function renderDetailBody(aptId,p){
     const prev=txs[i+1];const diff=prev?tx.price-prev.price:null;
     // 카드와 동일 규칙: 상승=up(초록)/하락=down(빨강)
     const dh=diff!==null?`<div class="tx-diff ${diff>0?'up-color':diff<0?'down-color':'neu-color'}">${diff>0?'▲':diff<0?'▼':'─'} ${formatPrice(Math.abs(diff))}</div>`:'';
-    return `<div class="tx-row"><div><div class="tx-date">${fmtDate(tx.year,tx.month,tx.day)} · ${tx.floor}층</div><div class="tx-detail">${pyeongStr(tx.area)}</div></div><div><div class="tx-price">${formatPrice(tx.price)}</div>${dh}</div></div>`;
+    return `<div class="tx-row"><div><div class="tx-date">${fmtDate(tx.year,tx.month,tx.day)} · ${tx.floor}층${floorTier(tx.floor)?` <span class="floor-tier">${floorTier(tx.floor)}</span>`:''}</div><div class="tx-detail">${pyeongStr(tx.area)}</div></div><div><div class="tx-price">${formatPrice(tx.price)}</div>${dh}</div></div>`;
   }).join('');
   body.innerHTML=summary+rows;
 }

@@ -18,6 +18,19 @@ test('fmtDate — 2자리 연도 + 선행0 제거', () => {
   assert.equal(L.fmtDate(2024, 3, 6), "'24.3.6");
 });
 
+test('floorTier — 저/중/고 (절대 층수 근사)', () => {
+  assert.equal(L.floorTier(1), '저층');
+  assert.equal(L.floorTier(5), '저층');
+  assert.equal(L.floorTier(6), '중층');
+  assert.equal(L.floorTier(15), '중층');
+  assert.equal(L.floorTier(16), '고층');
+  assert.equal(L.floorTier(42), '고층');
+  assert.equal(L.floorTier('7'), '중층');   // 문자열
+  assert.equal(L.floorTier('-'), '');        // 불명
+  assert.equal(L.floorTier(0), '');
+  assert.equal(L.floorTier(-1), '');         // 지하
+});
+
 test('평형 변환', () => {
   assert.equal(L.m2ToPyeong(84.95), 26);
   assert.equal(L.pyeongShort(84.95), '26평(84.95㎡)');

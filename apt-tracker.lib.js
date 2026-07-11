@@ -41,6 +41,14 @@
   function pyeongStr(m2) {
     return '전용 ' + m2 + '㎡ · ' + m2ToPyeong(m2) + '평';
   }
+
+  // 층 구분(저/중/고). data.go.kr 에 총층수가 없어 절대 층수 기준 근사.
+  // 저층 1~5 · 중층 6~15 · 고층 16+ . 지하/불명은 ''.
+  function floorTier(floor) {
+    var f = parseInt(floor, 10);
+    if (isNaN(f) || f <= 0) return '';
+    return f <= 5 ? '저층' : f <= 15 ? '중층' : '고층';
+  }
   function pyeongShort(m2) {
     return m2ToPyeong(m2) + '평(' + m2 + '㎡)';
   }
@@ -197,6 +205,7 @@
     m2ToPyeong: m2ToPyeong,
     pyeongStr: pyeongStr,
     pyeongShort: pyeongShort,
+    floorTier: floorTier,
     getLastNMonths: getLastNMonths,
     periodLabel: periodLabel,
     calcStats: calcStats,
