@@ -3,3 +3,7 @@ config.local.php
 
 __pycache__/
 *.pyc
+
+# 관심목록 동기화 데이터 (런타임 서버 생성)
+synced/
+config.local.php

@@ -154,6 +154,13 @@
   .pyeong-hint{font-size:11px;color:var(--muted);margin-top:8px;}
   .btn-add{background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:opacity .15s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
   .btn-add:hover{opacity:.88;}
+  .btn-sync{background:var(--card2);color:var(--muted2);border:1.5px solid var(--border);padding:8px 13px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:border-color .15s,color .15s;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+  .btn-sync:hover{border-color:var(--accent);color:var(--accent);}
+  .sync-code-row{display:flex;align-items:center;gap:10px;}
+  .sync-code{flex:1;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:22px;font-weight:800;letter-spacing:2px;color:var(--accent);background:#07090f;border:1px dashed var(--border2);border-radius:9px;padding:12px 14px;text-align:center;user-select:all;}
+  .sync-inline{display:flex;gap:8px;align-items:stretch;}
+  .sync-inline input[type=text]{text-transform:uppercase;letter-spacing:1px;font-family:'SF Mono',ui-monospace,Menlo,monospace;}
+  .sync-inline .btn-primary{width:auto;white-space:nowrap;padding:11px 16px;}
   .form-label{font-size:12px;color:var(--muted);display:block;margin-bottom:8px;}
   .form-label .req{color:var(--down);}
   .form-group{margin-bottom:18px;}
@@ -261,14 +268,15 @@
     #dashboard-screen{padding:14px 10px 76px;}
     .header-title{font-size:17px;}
     .period-btn{padding:6px 9px;font-size:12px;}
-    .btn-add{padding:8px 12px;font-size:12px;}
+    .btn-add,.btn-sync{padding:8px 12px;font-size:12px;}
     .budget-wrap{padding:5px 9px;}
     .modal-box{padding:22px 18px;}
+    .sync-code{font-size:19px;}
   }
   @media(max-width:380px){
     .header-title{font-size:16px;}
     .period-btns{gap:4px;}.period-btn{padding:5px 7px;font-size:11px;}
-    .btn-add{padding:7px 10px;font-size:11px;}
+    .btn-add,.btn-sync{padding:7px 10px;font-size:11px;}
     .budget-input{width:48px;}
     .apt-card{padding:8px 10px;}.card-price-main{font-size:19px;}
     .region-avg-toggle{font-size:10px;padding:4px 9px;}
@@ -392,6 +400,7 @@
           aria-label="예산 금액(억원)" oninput="onBudgetChange()" onchange="onBudgetChange()">
         <span class="budget-unit">억</span>
       </div>
+      <button class="btn-sync" onclick="openSyncModal()" title="관심목록 동기화 — 다른 기기에서도 보기" aria-label="관심목록 동기화">☁ 동기화</button>
       <button class="btn-add" onclick="openAddModal()">＋ 아파트 추가</button>
     </div>
   </div>
@@ -522,6 +531,33 @@
       <p class="pyeong-hint" id="pyeong-hint">1개 이상 선택해주세요</p>
     </div>
     <button class="btn-primary" onclick="addApartment()">추가하기</button>
+  </div>
+</div>
+
+<!-- SYNC MODAL: 관심목록 동기화 -->
+<div class="modal-backdrop" id="sync-modal" onmousedown="onBackdropDown(event)" onclick="backdropClose(event,'sync-modal')">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-label="관심목록 동기화">
+    <div class="modal-head">
+      <span class="modal-title">☁ 관심목록 동기화</span>
+      <button class="modal-close" aria-label="닫기" onclick="closeModal('sync-modal')">×</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">내 동기화 코드</label>
+      <div class="sync-code-row">
+        <span class="sync-code" id="sync-code-display">----</span>
+        <button class="btn-ghost" onclick="copySyncCode()">복사</button>
+      </div>
+      <p class="form-hint">이 코드를 다른 기기(폰·PC)에서 입력하면 같은 관심목록을 보고, 이후 자동으로 동기화됩니다.</p>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label class="form-label">다른 기기 코드로 불러오기</label>
+      <div class="sync-inline">
+        <input type="text" id="sync-code-input" placeholder="예: A7K2-9QX3" autocomplete="off"
+          onkeydown="if(event.key==='Enter')pullSync(this.value)">
+        <button class="btn-primary" onclick="pullSync(document.getElementById('sync-code-input').value)">불러오기</button>
+      </div>
+      <p class="form-hint">⚠️ 불러오면 이 기기의 현재 관심목록을 대체합니다.</p>
+    </div>
   </div>
 </div>
 
@@ -668,11 +704,63 @@ function loadStorage(){
   lastSeen={};
   for(const k in raw) lastSeen[k]=new Set(raw[k]);
 }
-function saveApts(){localStorage.setItem('apt_list2',JSON.stringify(apartments));}
+function saveApts(){localStorage.setItem('apt_list2',JSON.stringify(apartments));pushSync();}
 function saveSeen(){
   const raw={};
   for(const k in lastSeen) raw[k]=[...lastSeen[k]];
   localStorage.setItem('apt_seen2',JSON.stringify(raw));
+  pushSync();
+}
+
+// ── 관심목록 서버 동기화 (코드 기반, 로그인 없음) ────────────────
+// 기기마다 코드(예: A7K2-9QX3) 자동 생성 → 관심목록을 sync.php 에 저장.
+// 다른 기기에서 코드를 입력하면 같은 목록을 불러오고, 이후 같은 코드로 자동 동기화.
+function genSyncCode(){
+  var alpha='ABCDEFGHJKMNPQRSTUVWXYZ23456789',s='';   // 0/O/1/I/L 등 혼동 문자 제외
+  for(var i=0;i<8;i++) s+=alpha.charAt(Math.floor(Math.random()*alpha.length));
+  return s.slice(0,4)+'-'+s.slice(4);
+}
+function getSyncCode(){
+  var c=null; try{ c=localStorage.getItem('apt_sync_code'); }catch(e){}
+  if(!c){ c=genSyncCode(); try{ localStorage.setItem('apt_sync_code',c); }catch(e){} }
+  return c;
+}
+var _syncTimer=null;
+function pushSync(){   // 디바운스 저장(연속 변경을 800ms 뒤 1회로)
+  var code=getSyncCode().replace(/[^A-Za-z0-9]/g,'');
+  clearTimeout(_syncTimer);
+  _syncTimer=setTimeout(function(){
+    var seen={}; for(var k in lastSeen) seen[k]=[].slice.call(lastSeen[k]);
+    var payload=JSON.stringify({v:1,apartments:apartments,seen:seen});
+    try{ fetch('sync.php?code='+code,{method:'POST',body:payload})['catch'](function(){}); }catch(e){}
+  },800);
+}
+function pullSync(raw){   // 다른 기기 코드로 불러오기
+  var cc=(raw||'').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+  if(cc.length<6){ toast('⚠ 코드를 정확히 입력해 주세요'); return; }
+  fetch('sync.php?code='+cc).then(function(r){return r.json();}).then(function(j){
+    if(!j||j.empty){ toast('⚠ 이 코드로 저장된 목록이 없어요'); return; }
+    if(!j.apartments||!j.apartments.length){ toast('⚠ 불러올 관심단지가 없어요'); return; }
+    apartments=j.apartments;
+    lastSeen={}; if(j.seen) for(var k in j.seen) lastSeen[k]=new Set(j.seen[k]);
+    try{ localStorage.setItem('apt_sync_code', cc.slice(0,4)+'-'+cc.slice(4)); }catch(e){}  // 같은 코드 채택
+    saveApts(); saveSeen();
+    closeModal('sync-modal');
+    toast('✅ 관심목록 '+apartments.length+'개를 불러왔어요!');
+    renderGrid();
+    if(apartments.length) refreshAll();
+  })['catch'](function(){ toast('⚠ 불러오기 실패 (네트워크)'); });
+}
+function openSyncModal(){
+  var d=document.getElementById('sync-code-display'); if(d) d.textContent=getSyncCode();
+  var inp=document.getElementById('sync-code-input'); if(inp) inp.value='';
+  openModal('sync-modal');
+}
+function copySyncCode(){
+  var c=getSyncCode();
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(c).then(function(){toast('✅ 코드 복사됨: '+c);},function(){toast('코드: '+c);});
+  } else { toast('코드: '+c); }
 }
 function toast(msg,d=2500){
   const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
