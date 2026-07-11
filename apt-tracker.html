@@ -248,7 +248,8 @@
   .ds-sub{font-family:'Noto Sans KR',sans-serif;font-size:10px;font-weight:400;color:var(--muted);}
   /* ── 모드 토글 + 발굴 랭킹 ── */
   .mode-toggle{display:inline-flex;gap:4px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:16px;}
-  .mode-btn{background:none;border:none;color:var(--muted2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
+  .mode-btn{display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:var(--muted2);padding:8px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
+  .mode-btn svg{width:15px;height:15px;flex-shrink:0;}
   .mode-btn.active{background:var(--accent);color:#000;}
   .discover-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
   .disc-select{width:auto;min-width:108px;padding:9px 12px;}
@@ -310,10 +311,10 @@
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
       <div class="period-btns">
-        <button class="period-btn" data-months="3" onclick="setPeriod(this)">3개월</button>
         <button class="period-btn" data-months="6" onclick="setPeriod(this)">6개월</button>
-        <button class="period-btn active" data-months="12" onclick="setPeriod(this)">1년</button>
-        <button class="period-btn" data-months="36" onclick="setPeriod(this)">3년</button>
+        <button class="period-btn" data-months="12" onclick="setPeriod(this)">1년</button>
+        <button class="period-btn active" data-months="36" onclick="setPeriod(this)">3년</button>
+        <button class="period-btn" data-months="60" onclick="setPeriod(this)">5년</button>
       </div>
       <div class="budget-wrap" id="budget-wrap">
         <input type="checkbox" class="budget-check" id="budget-check" onchange="onBudgetChange()">
@@ -326,10 +327,12 @@
     </div>
   </div>
 
-  <!-- 모드 토글: 관심목록 / 단지 발굴 -->
+  <!-- 모드 토글: 관심목록 / 단지 검색 -->
   <div class="mode-toggle" role="tablist" aria-label="보기 모드">
-    <button class="mode-btn active" data-mode="watch" role="tab" aria-selected="true" onclick="setMode('watch')">📋 관심목록</button>
-    <button class="mode-btn" data-mode="discover" role="tab" aria-selected="false" onclick="setMode('discover')">🔍 단지 발굴</button>
+    <button class="mode-btn active" data-mode="watch" role="tab" aria-selected="true" onclick="setMode('watch')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>관심목록</button>
+    <button class="mode-btn" data-mode="discover" role="tab" aria-selected="false" onclick="setMode('discover')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>단지 검색</button>
   </div>
 
   <div id="watch-view">
@@ -1295,20 +1298,13 @@ function renderDiscover(){
     rows.sort((a,b)=>b.avg-a.avg);
   }
   discShown=rows.slice(0,30);
-  let sortNote;
-  if(discSort==='growth') sortNote = currentPeriod<=3
-    ? '상승률(추세)은 관측 3개월↑ 단지만 — 3개월 조회는 결과가 적어요, 기간 늘리기 권장'
-    : '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)';
-  else sortNote = discSort==='count' ? '거래량순' : '평단가순';
+  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
+    : discSort==='count' ? '거래량순' : '평단가순';
   noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
   if(!discShown.length){
-    let msg;
-    if(discSort==='growth' && currentPeriod<=3)
-      msg='3개월 조회에선 상승률(추세)이 나오는 단지가 드물어요.<br>추세는 <b>서로 다른 3개월 이상</b> 거래된 단지에서만 계산됩니다.<br>조회 기간을 <b>6개월·1년</b>으로 늘려보세요.';
-    else if(discSort==='growth')
-      msg='이 조건에 맞는 단지가 없어요 (관측 3개월 이상 거래 필요).<br>다른 평형·구를 선택하거나 기간을 늘려보세요.';
-    else
-      msg='조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).';
+    const msg = discSort==='growth'
+      ? '이 조건에 맞는 단지가 없어요 (관측 3개월 이상 거래 필요).<br>다른 평형·구를 선택하거나 기간을 늘려보세요.'
+      : '조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).';
     resultsEl.innerHTML=`<div class="tx-no">${msg}</div>`;
     return;
   }
@@ -1373,7 +1369,7 @@ const CHART_COLORS = [
   {line:'#34d399', area:'rgba(52,211,153,0.15)',   cls:'selected-d'},
   {line:'#fb923c', area:'rgba(251,146,60,0.15)',   cls:'selected-e'},
 ];
-let currentPeriod = 12;  // 조회 기간(개월) 기본값 1년
+let currentPeriod = 36;  // 조회 기간(개월) 기본값 3년
 // selectedAptIds는 이제 [{aptId, pyeong}] 배열
 // 기존 호환을 위해 aptId 배열도 유지
 
@@ -1563,16 +1559,17 @@ function renderChart() {
       : '';
 
     if (areaPath) paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
-    paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
+    paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
 
     // 최고가 포인트 찾기
     const maxPt = pts.reduce((best, p) => p.tx.price > best.tx.price ? p : best, pts[0]);
 
     pts.forEach(p => {
       const isMax = p === maxPt;
+      // 거래 점 강조: 라인은 얇게, 점은 크고 또렷하게(배경색 링으로 분리)
       dots.push(`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}"
-        r="${isMax ? 3 : pts.length===1 ? 3 : 1.8}"
-        fill="${c.line}" stroke="${isMax ? '#fff' : '#070b14'}" stroke-width="2"
+        r="${isMax ? 4.5 : pts.length===1 ? 4 : 3}"
+        fill="${c.line}" stroke="${isMax ? '#fff' : '#070b14'}" stroke-width="${isMax ? 2 : 1.5}"
         class="chart-dot" data-series="${si}" data-idx="${pts.indexOf(p)}"/>`);
     });
 
