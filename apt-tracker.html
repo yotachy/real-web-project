@@ -24,7 +24,7 @@
   .density-btn{background:none;border:none;color:var(--muted2);font-size:11px;font-weight:700;padding:4px 11px;border-radius:6px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
   .density-btn.active{background:var(--accent);color:#000;}
   /* 평형 그룹 카드 목록 (세로 리스트) */
-  .pyeong-groups{min-width:0;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;padding-right:3px;}
+  .pyeong-groups{min-width:0;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:18px;padding-right:3px;}
   .pyeong-groups::-webkit-scrollbar{width:5px;}
   .pyeong-groups::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
   /* 밀도: 기본=컴팩트(상세부 숨김·타이트), 상세=전체 */
@@ -34,8 +34,10 @@
   .pyeong-groups.detail .apt-card{padding:12px 14px;}
   .pyeong-groups.detail .card-head{margin-bottom:8px;}
   .pyeong-group{display:flex;flex-direction:column;gap:8px;}
-  .pyeong-group-head{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.6px;padding:0 2px;}
-  .pyeong-group-head .pg-count{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--muted2);background:var(--card2);border:1px solid var(--border);border-radius:99px;padding:1px 7px;}
+  /* 스티키 섹션 헤더: 스크롤해도 상단 고정 + 액센트 바·구분선으로 그룹 명확 */
+  .pyeong-group-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--text);letter-spacing:.3px;padding:7px 4px;background:var(--bg);border-bottom:1px solid var(--border2);}
+  .pyeong-group-head::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--accent);flex-shrink:0;}
+  .pyeong-group-head .pg-count{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--muted2);background:var(--card2);border:1px solid var(--border);border-radius:99px;padding:1px 7px;margin-left:2px;}
   .pyeong-group-cards{display:flex;flex-direction:column;gap:6px;}
   /* 아파트 카드 (세로 리스트, 세련) */
   .apt-card{position:relative;width:100%;background:linear-gradient(180deg,#0e1727,#0b1120);border:1px solid var(--border);border-radius:12px;cursor:pointer;padding:9px 12px;animation:fadeUp .3s ease both;transition:border-color .18s,transform .12s,box-shadow .18s;}
@@ -76,7 +78,7 @@
   .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
-  @media(max-width:900px){.main-layout{grid-template-columns:1fr;grid-template-areas:"cards" "chart";}.cards-col{position:static;max-height:none;}.pyeong-groups{overflow:visible;}.chart-panel{position:static;min-height:360px;}}
+  @media(max-width:900px){.main-layout{grid-template-columns:1fr;grid-template-areas:"cards" "chart";}.cards-col{position:static;max-height:none;}.pyeong-groups{overflow:visible;}.pyeong-group-head{position:static;}.chart-panel{position:static;min-height:360px;}}
   /* 카드 헤더/바디 */
   .card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;}
   .card-apt-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;}
