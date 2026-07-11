@@ -245,6 +245,30 @@
   .ds-v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;}
   .ds-v.up-color{color:var(--up);}.ds-v.down-color{color:var(--down);}.ds-v.neu-color{color:var(--muted2);}
   .ds-sub{font-family:'Noto Sans KR',sans-serif;font-size:10px;font-weight:400;color:var(--muted);}
+  /* ── 모드 토글 + 발굴 랭킹 ── */
+  .mode-toggle{display:inline-flex;gap:4px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:16px;}
+  .mode-btn{background:none;border:none;color:var(--muted2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
+  .mode-btn.active{background:var(--accent);color:#000;}
+  .discover-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .disc-select{width:auto;min-width:108px;padding:9px 12px;}
+  .disc-pyeong{display:flex;gap:5px;flex-wrap:wrap;}
+  .disc-pyeong-btn{background:#0d1422;border:1.5px solid var(--border);color:var(--muted2);padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
+  .disc-pyeong-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+  .discover-note{font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5;}
+  .disc-row{display:grid;grid-template-columns:32px 1fr auto auto;align-items:center;gap:12px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;}
+  .disc-rank{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;color:var(--muted2);text-align:center;}
+  .disc-main{min-width:0;}
+  .disc-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
+  .disc-add{background:var(--accent);color:#000;border:none;padding:7px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:opacity .15s;}
+  .disc-add:hover{opacity:.88;}
+  .disc-add:disabled{background:var(--card2);color:var(--muted);cursor:default;border:1px solid var(--border);}
+  @media(max-width:560px){
+    .disc-row{grid-template-columns:26px 1fr auto;gap:8px 10px;}
+    .disc-growth{grid-column:2;grid-row:2;justify-self:start;font-size:13px;}
+    .disc-add{grid-column:3;grid-row:1/3;align-self:center;}
+  }
   /* 키보드 포커스 가시성 */
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   .apt-card:focus:not(:focus-visible),.card-icon-btn:focus:not(:focus-visible),
@@ -283,6 +307,13 @@
     </div>
   </div>
 
+  <!-- 모드 토글: 관심목록 / 단지 발굴 -->
+  <div class="mode-toggle" role="tablist" aria-label="보기 모드">
+    <button class="mode-btn active" data-mode="watch" role="tab" aria-selected="true" onclick="setMode('watch')">📋 관심목록</button>
+    <button class="mode-btn" data-mode="discover" role="tab" aria-selected="false" onclick="setMode('discover')">🔍 단지 발굴</button>
+  </div>
+
+  <div id="watch-view">
   <!-- 평형 그룹 카드 영역 -->
   <div class="pyeong-groups" id="pyeong-groups">
     <div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
@@ -344,6 +375,23 @@
         </div>
       </div>
     </div>
+  </div>
+  </div><!-- /watch-view -->
+
+  <!-- 발굴 뷰: 구·평형·정렬 선택 → 단지 랭킹 -->
+  <div id="discover-view" style="display:none">
+    <div class="discover-controls">
+      <select id="disc-city" class="disc-select" aria-label="시/도" onchange="onDiscCityChange()"></select>
+      <select id="disc-gu" class="disc-select" aria-label="구/군" onchange="onDiscGuChange()"></select>
+      <div class="disc-pyeong" id="disc-pyeong" role="group" aria-label="평형"></div>
+      <select id="disc-sort" class="disc-select" aria-label="정렬" onchange="renderDiscover()">
+        <option value="growth">상승률순</option>
+        <option value="count">거래량순</option>
+        <option value="avg">평단가순</option>
+      </select>
+    </div>
+    <div class="discover-note" id="discover-note"></div>
+    <div id="discover-results"></div>
   </div>
 </div>
 
@@ -1018,31 +1066,177 @@ async function addApartment(){
     btn.disabled=false;btn.innerHTML='추가하기';
   }
 
-  computeRegionAvg(region.code, allTxs);   // 지역평균 대비용
-  // 지역 데이터에 정확히 일치하는 아파트가 없으면(오타·미선택) 유령 빈 카드 방지
-  const exactTxs=allTxs.filter(tx=>tx.aptName===exactName);
-  if(!exactTxs.length){
+  const apt = commitApt(region, exactName, selectedPyeongs, allTxs);
+  if(!apt){   // 정확일치 거래 없음(오타·미선택) → 유령 빈 카드 방지
     toast('⚠ 자동완성 목록에서 아파트를 선택하거나 조회 기간을 늘려보세요', 4500);
     return;
   }
-
-  // 정확한 이름으로 등록
-  const apt={id:`${region.code}_${Date.now()}`,lawdCd:region.code,regionName:region.name,aptName:exactName,pyeongs:[...selectedPyeongs]};
-  apartments.push(apt);saveApts();closeModal('add-modal');renderGrid();
-
-  const result={};
-  for(const p of selectedPyeongs){
-    result[p]=bucketByPyeong(exactTxs, p);
-  }
-  transactions[apt.id]=result;
-  const flat=Object.values(result).flat();
-  newCounts[apt.id]=0;   // 방금 추가·조회한 것이므로 '신규' 아님(가짜 +N 방지)
-  lastSeen[apt.id]=new Set(flat.map(t=>t.id));
-  saveSeen();
-
-  renderGrid();toast(`✅ ${exactName} 추가 완료!`);
+  closeModal('add-modal');
+  renderGrid();
+  toast(`✅ ${exactName} 추가 완료!`);
   // 추가된 아파트의 첫 평형 자동 선택
   if(apt.pyeongs.length>0) setTimeout(()=>selectCard(apt.id, apt.pyeongs[0]),100);
+}
+
+// 아파트를 관심목록에 등록 (addApartment·발굴 공용). 정확일치 거래 없으면 null.
+function commitApt(region, exactName, pyeongs, allTxs){
+  computeRegionAvg(region.code, allTxs);   // 지역평균 대비용
+  const exactTxs=allTxs.filter(tx=>tx.aptName===exactName);
+  if(!exactTxs.length) return null;
+  const apt={id:`${region.code}_${Date.now()}`,lawdCd:region.code,regionName:region.name,aptName:exactName,pyeongs:[...pyeongs]};
+  const result={};
+  for(const p of pyeongs) result[p]=bucketByPyeong(exactTxs, p);
+  apartments.push(apt); transactions[apt.id]=result;
+  const flat=Object.values(result).flat();
+  newCounts[apt.id]=0;   // 방금 추가·조회한 것이므로 '신규' 아님
+  lastSeen[apt.id]=new Set(flat.map(t=>t.id));
+  saveApts(); saveSeen();
+  return apt;
+}
+
+// ─── 발굴 랭킹 (구 전체 단지 순위) ───────────────────────────────
+let currentMode='watch';
+let discCity='서울특별시', discGu='', discPyeong='30', discSort='growth';
+let discCache={};   // `${gu}_${period}` -> regionAll
+let discRows=[];    // 현재 구·평형의 계산 결과
+let discShown=[];   // 정렬·TOP 적용된 렌더 대상 (관심추가 인덱스 참조)
+let discGen=0;      // 조회 경합 가드
+let discInited=false;
+
+function setMode(mode){
+  currentMode=mode;
+  const watch = mode==='watch';
+  document.getElementById('watch-view').style.display = watch?'':'none';
+  document.getElementById('discover-view').style.display = watch?'none':'';
+  document.querySelectorAll('.mode-btn').forEach(b=>{
+    const on=b.dataset.mode===mode;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on?'true':'false');
+  });
+  // 발굴 모드에선 예산·추가(관심목록 전용) 숨김
+  const bw=document.getElementById('budget-wrap'); if(bw) bw.style.display=watch?'':'none';
+  const ab=document.querySelector('.btn-add'); if(ab) ab.style.display=watch?'':'none';
+  if(!watch){
+    if(!discInited){ initDiscover(); discInited=true; }
+    runDiscover();
+  }
+}
+
+function initDiscover(){
+  const cityEl=document.getElementById('disc-city');
+  cityEl.innerHTML=CITIES.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  cityEl.value=discCity;
+  updateDiscGu(discCity);
+  renderDiscPyeong();
+}
+function updateDiscGu(city){
+  const guEl=document.getElementById('disc-gu');
+  const filtered=REGIONS.filter(r=>r.city===city);
+  guEl.innerHTML=filtered.map(r=>`<option value="${r.code}">${escapeHtml(r.gu)}</option>`).join('');
+  discGu=(filtered[0]||{}).code||'';
+  guEl.value=discGu;
+}
+function onDiscCityChange(){ discCity=document.getElementById('disc-city').value; updateDiscGu(discCity); runDiscover(); }
+function onDiscGuChange(){ discGu=document.getElementById('disc-gu').value; runDiscover(); }
+function renderDiscPyeong(){
+  document.getElementById('disc-pyeong').innerHTML=['10','20','30','40','50'].map(p=>
+    `<button class="disc-pyeong-btn${p===discPyeong?' active':''}" aria-pressed="${p===discPyeong}" onclick="setDiscPyeong('${p}')">${PYEONG_DEFS[p].label}</button>`
+  ).join('');
+}
+function setDiscPyeong(p){ discPyeong=p; renderDiscPyeong(); computeAndRenderDiscover(); }
+
+async function runDiscover(){
+  if(!discGu) return;
+  const resultsEl=document.getElementById('discover-results');
+  const gen=++discGen;
+  resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> 조회중...</div>`;
+  document.getElementById('discover-note').textContent='';
+  const ck=`${discGu}_${currentPeriod}`;
+  let regionAll=discCache[ck];
+  if(!regionAll){
+    try{
+      const ymds=getLastNMonths(currentPeriod);
+      const br=await fetchBatch(discGu, ymds);
+      if(gen!==discGen) return;   // 더 최신 요청 있음 → 폐기
+      regionAll=Object.values(br).flat().filter(Boolean);
+      discCache[ck]=regionAll;
+    }catch(e){
+      if(gen!==discGen) return;
+      resultsEl.innerHTML=`<div class="tx-no">조회 실패: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+  }
+  if(gen!==discGen) return;
+  computeRegionAvg(discGu, regionAll);
+  computeAndRenderDiscover();
+}
+
+function computeAndRenderDiscover(){
+  const regionAll=discCache[`${discGu}_${currentPeriod}`];
+  if(!regionAll) return;
+  const byName={};
+  regionAll.forEach(tx=>{ (byName[tx.aptName]=byName[tx.aptName]||[]).push(tx); });
+  const rAvg=(regionAvg[discGu]||{})[discPyeong]||0;
+  discRows=[];
+  Object.keys(byName).forEach(name=>{
+    const bucket=bucketByPyeong(byName[name], discPyeong);
+    if(bucket.length<3) return;   // 노이즈 방지: 기간 내 거래 3건 이상만
+    const stats=calcStats(bucket);
+    const avg=avgPyeongPrice(bucket);
+    discRows.push({ name, latest:stats.latest.price, count:bucket.length,
+      growth:growthRate(bucket), avg,
+      regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
+  });
+  renderDiscover();
+}
+
+function renderDiscover(){
+  discSort=document.getElementById('disc-sort').value;
+  const resultsEl=document.getElementById('discover-results');
+  const noteEl=document.getElementById('discover-note');
+  const region=REGIONS.find(r=>r.code===discGu);
+  let rows=discRows.slice();
+  if(discSort==='growth') rows.sort((a,b)=>(b.growth==null?-1e9:b.growth)-(a.growth==null?-1e9:a.growth));
+  else if(discSort==='count') rows.sort((a,b)=>b.count-a.count);
+  else rows.sort((a,b)=>b.avg-a.avg);
+  discShown=rows.slice(0,30);
+  noteEl.textContent=`${region?region.name:''} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · 거래 3건 이상 ${rows.length}개 단지 · 상승률은 평단가 기준 근사치`;
+  if(!discShown.length){
+    resultsEl.innerHTML=`<div class="tx-no">조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요). 조회 기간을 늘려보세요.</div>`;
+    return;
+  }
+  resultsEl.innerHTML=discShown.map((r,i)=>{
+    const already=apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && a.pyeongs.includes(discPyeong));
+    const gStr=r.growth==null?'-':`${r.growth>=0?'+':''}${r.growth.toFixed(1)}%`;
+    const gCls=r.growth==null?'neu-color':r.growth>=0?'up-color':'down-color';
+    const rd=r.regionDiff==null?'':`· <span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`;
+    return `<div class="disc-row">
+      <div class="disc-rank">${i+1}</div>
+      <div class="disc-main">
+        <div class="disc-name">${escapeHtml(r.name)} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
+        <div class="disc-meta">최근 ${formatPrice(r.latest)} · ${r.count}건 · ${r.avg.toLocaleString()}만/평 ${rd}</div>
+      </div>
+      <div class="disc-growth ${gCls}">${gStr}</div>
+      <button class="disc-add" ${already?'disabled':''} onclick="addFromDiscover(${i})">${already?'추가됨':'＋관심'}</button>
+    </div>`;
+  }).join('');
+}
+
+function addFromDiscover(idx){
+  const row=discShown[idx];
+  if(!row) return;
+  if(apartments.length>=10){ toast('⚠ 아파트는 최대 10개까지 추가할 수 있어요', 3500); return; }
+  const region=REGIONS.find(r=>r.code===discGu);
+  if(apartments.some(a=>a.lawdCd===discGu && a.aptName===row.name && a.pyeongs.includes(discPyeong))){
+    toast('⚠ 이미 추가된 아파트·평형이에요', 3000); return;
+  }
+  const regionAll=discCache[`${discGu}_${currentPeriod}`];
+  if(!regionAll){ toast('⚠ 데이터가 없어요, 다시 시도해주세요'); return; }
+  const apt=commitApt(region, row.name, [discPyeong], regionAll);
+  if(!apt){ toast('⚠ 추가 실패'); return; }
+  renderGrid();
+  toast(`✅ ${row.name} 관심목록 추가!`);
+  renderDiscover();   // 버튼 '추가됨' 상태 갱신
 }
 // ─── 선택된 카드 & 차트 ──────────────────────────────────────────
 // ─── 기간 선택 ──────────────────────────────────────────────────
@@ -1075,6 +1269,7 @@ function setPeriod(btn) {
     document.getElementById('tx-list-body').innerHTML = '';
   }
   if (apartments.length > 0) refreshAll(true);   // 기간 변경: 신규 배지 억제
+  if (currentMode === 'discover') runDiscover(); // 발굴 뷰도 새 기간으로 갱신
 }
 
 // ─── 비교 차트 ──────────────────────────────────────────────────

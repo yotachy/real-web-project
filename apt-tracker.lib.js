@@ -124,6 +124,18 @@
 
   var dateKey = function (t) { return '' + t.year + t.month + t.day; };
 
+  // 기간 내 상승률(%): 초기 구간 평균 평단가 → 최근 구간 평균 평단가.
+  // 노이즈 방지로 3건 미만은 null. (짝수는 앞/뒤 절반, 홀수는 가운데 1건 제외)
+  function growthRate(txs) {
+    if (!txs || txs.length < 3) return null;
+    var sorted = txs.slice().sort(function (a, b) { return dateKey(a).localeCompare(dateKey(b)); });
+    var mid = Math.floor(sorted.length / 2);
+    var e = avgPyeongPrice(sorted.slice(0, mid));
+    var l = avgPyeongPrice(sorted.slice(sorted.length - mid));
+    if (!e || !l) return null;
+    return (l - e) / e * 100;
+  }
+
   // 평형 구간으로 필터 + 날짜 내림차순 정렬
   function bucketByPyeong(txs, pyeongKey) {
     var def = PYEONG_DEFS[pyeongKey];
@@ -149,7 +161,8 @@
     normalizeName: normalizeName,
     escapeHtml: escapeHtml,
     matchByName: matchByName,
-    bucketByPyeong: bucketByPyeong
+    bucketByPyeong: bucketByPyeong,
+    growthRate: growthRate
   };
 
   if (typeof module !== 'undefined' && module.exports) {

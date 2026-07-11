@@ -95,6 +95,23 @@ test('escapeHtml — XSS 문자 이스케이프', () => {
   assert.equal(L.escapeHtml('래미안'), '래미안');
 });
 
+test('growthRate — 초기→최근 평단가 상승률, 3건 미만 null', () => {
+  assert.equal(L.growthRate([{ price: 100, area: 84 }, { price: 110, area: 84 }]), null); // 2건
+  assert.equal(L.growthRate(null), null);
+  const txs = [
+    { price: 100000, area: 84, year: '2024', month: '01', day: '01' },
+    { price: 110000, area: 84, year: '2024', month: '02', day: '01' },
+    { price: 130000, area: 84, year: '2024', month: '03', day: '01' },
+    { price: 140000, area: 84, year: '2024', month: '04', day: '01' }
+  ];
+  const g = L.growthRate(txs);
+  assert.ok(g > 0);   // 앞 절반보다 뒤 절반이 비쌈
+  const eAvg = L.avgPyeongPrice([txs[0], txs[1]]), lAvg = L.avgPyeongPrice([txs[2], txs[3]]);
+  assert.ok(Math.abs(g - (lAvg - eAvg) / eAvg * 100) < 1e-6);
+  // 정렬 무관(입력 순서 뒤섞여도 날짜로 정렬)
+  assert.ok(Math.abs(L.growthRate([txs[3], txs[0], txs[2], txs[1]]) - g) < 1e-9);
+});
+
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {
   // batch.php 가 돌려주는 형태를 fetchBatchChunk 가 변환한 tx 배열
   const regionAll = [
