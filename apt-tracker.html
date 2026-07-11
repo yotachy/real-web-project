@@ -629,15 +629,17 @@ async function fetchBatchChunk(lawdCd, ymds) {
 }
 
 async function fetchBatch(lawdCd, ymds) {
-  const CHUNK = 12;
-  const PARALLEL = 2; // 청크 2개씩 병렬 (서버 부하 vs 속도 균형)
+  // batch.php 가 서버에서 curl_multi 로 모든 달을 병렬 처리하므로,
+  // 큰 청크(20개월)를 한 번에 병렬로 보내 왕복 라운드를 최소화한다.
+  // (예전 12개월×2병렬은 5년 조회를 3라운드로 직렬화해 느렸음)
+  const CHUNK = 20;
+  const MAX_PARALLEL = 3;   // 동시 요청 상한 (cafe24 동시 PHP·API 부하 보호)
   const chunks = [];
   for (let i = 0; i < ymds.length; i += CHUNK) chunks.push(ymds.slice(i, i + CHUNK));
 
   const merged = {};
-  // PARALLEL 개씩 묶어서 병렬 처리
-  for (let i = 0; i < chunks.length; i += PARALLEL) {
-    const group = chunks.slice(i, i + PARALLEL);
+  for (let i = 0; i < chunks.length; i += MAX_PARALLEL) {
+    const group = chunks.slice(i, i + MAX_PARALLEL);
     const results = await Promise.allSettled(group.map(c => fetchBatchChunk(lawdCd, c)));
     for (const r of results) {
       if (r.status === 'fulfilled') Object.assign(merged, r.value);
