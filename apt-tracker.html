@@ -145,13 +145,13 @@
   .modal-close:hover{color:var(--text);}
   .sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:flex-end;justify-content:center;z-index:200;opacity:0;transition:opacity .2s;}
   .sheet-backdrop.show{opacity:1;}
-  .sheet-box{background:var(--card);border:1px solid var(--border);border-radius:18px 18px 0 0;border-bottom:none;width:100%;max-width:640px;max-height:85vh;display:flex;flex-direction:column;transform:translateY(30px);transition:transform .25s ease;}
+  .sheet-box{background:var(--card);border:1px solid var(--border);border-radius:18px 18px 0 0;border-bottom:none;width:100%;max-width:720px;max-height:92vh;display:flex;flex-direction:column;transform:translateY(30px);transition:transform .25s ease;}
   .sheet-backdrop.show .sheet-box{transform:translateY(0);}
   .sheet-head{padding:20px 24px 0;border-bottom:1px solid var(--border);flex-shrink:0;}
   .sheet-head-top{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;}
   .sheet-title{font-size:17px;font-weight:700;}
   .sheet-sub{font-size:12px;color:var(--muted);margin-top:3px;}
-  .sheet-body{overflow-y:auto;flex:1;padding:0 24px 32px;}
+  .sheet-body{overflow-y:auto;flex:1;min-height:0;padding:4px 24px 32px;}
   .detail-tabs{display:flex;gap:8px;padding:12px 0;overflow-x:auto;}
   .detail-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:5px 14px;border-radius:99px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
   .detail-tab.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
@@ -263,8 +263,11 @@
   .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
   .disc-dong,.ac-dong{font-size:11px;font-weight:500;color:var(--muted);}
-  /* 저/중/고층 태그 (절대 층수 근사) */
-  .floor-tier{display:inline-block;font-size:9px;font-weight:700;padding:0 5px;border-radius:99px;border:1px solid var(--border2);color:var(--muted2);vertical-align:middle;margin-left:2px;}
+  /* 저/중/고층 태그 (절대 층수 근사) — 저층 파랑·중층 회색·고층 골드 */
+  .floor-tier{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;vertical-align:middle;margin-left:3px;}
+  .floor-tier.low{background:rgba(96,165,250,.16);color:var(--blue);}
+  .floor-tier.mid{background:rgba(148,163,184,.15);color:#94a3b8;}
+  .floor-tier.high{background:var(--accent-dim);color:var(--accent);}
   /* 아파트 추가 모달: 크게 + 시/도·구/군 2열 + 자주선택 pill */
   .modal-box-lg{max-width:560px;}
   .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
@@ -584,6 +587,11 @@ function saveSeen(){
 function toast(msg,d=2500){
   const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');
   setTimeout(()=>el.classList.remove('show'),d);
+}
+// 층 배지(색상 포함). 저/중/고 없으면 ''.
+function floorBadge(floor){
+  const t=floorTier(floor);
+  return t ? ` <span class="floor-tier ${floorTierCls(floor)}">${t}</span>` : '';
 }
 
 // ── 배치 fetch: 서버에서 여러 달 병렬 처리 ─────────────────────
@@ -1708,9 +1716,9 @@ function renderTxList(series) {
       <div class="tx-item-bar" style="background:${isMulti ? color.line : 'transparent'}"></div>
       <div class="tx-item-info">
         <div class="tx-item-name" style="color:${isMulti ? color.line : 'var(--text)'}">
-          ${isMulti ? label : `${tx.floor}층${floorTier(tx.floor)?` <span class="floor-tier">${floorTier(tx.floor)}</span>`:''}`}
+          ${isMulti ? label : `${tx.floor}층${floorBadge(tx.floor)}`}
         </div>
-        <div class="tx-item-meta">${fmtDate(tx.year, tx.month, tx.day)}${isMulti && floorTier(tx.floor)?` · ${tx.floor}층 ${floorTier(tx.floor)}`:''}</div>
+        <div class="tx-item-meta">${fmtDate(tx.year, tx.month, tx.day)}${isMulti?` · ${tx.floor}층${floorBadge(tx.floor)}`:''}</div>
       </div>
       <div class="tx-item-price" style="color:${isMulti ? color.line : 'var(--text)'}">
         ${formatPrice(tx.price)}
@@ -1862,7 +1870,7 @@ function renderDetailBody(aptId,p){
     const prev=txs[i+1];const diff=prev?tx.price-prev.price:null;
     // 카드와 동일 규칙: 상승=up(초록)/하락=down(빨강)
     const dh=diff!==null?`<div class="tx-diff ${diff>0?'up-color':diff<0?'down-color':'neu-color'}">${diff>0?'▲':diff<0?'▼':'─'} ${formatPrice(Math.abs(diff))}</div>`:'';
-    return `<div class="tx-row"><div><div class="tx-date">${fmtDate(tx.year,tx.month,tx.day)} · ${tx.floor}층${floorTier(tx.floor)?` <span class="floor-tier">${floorTier(tx.floor)}</span>`:''}</div><div class="tx-detail">${pyeongStr(tx.area)}</div></div><div><div class="tx-price">${formatPrice(tx.price)}</div>${dh}</div></div>`;
+    return `<div class="tx-row"><div><div class="tx-date">${fmtDate(tx.year,tx.month,tx.day)} · ${tx.floor}층${floorBadge(tx.floor)}</div><div class="tx-detail">${pyeongStr(tx.area)}</div></div><div><div class="tx-price">${formatPrice(tx.price)}</div>${dh}</div></div>`;
   }).join('');
   body.innerHTML=summary+rows;
 }

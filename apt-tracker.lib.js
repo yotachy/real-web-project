@@ -49,6 +49,11 @@
     if (isNaN(f) || f <= 0) return '';
     return f <= 5 ? '저층' : f <= 15 ? '중층' : '고층';
   }
+  // 층 구분 → CSS 클래스 (색상용): 저층 low(파랑)·중층 mid(회색)·고층 high(골드)
+  function floorTierCls(floor) {
+    var t = floorTier(floor);
+    return t === '저층' ? 'low' : t === '중층' ? 'mid' : t === '고층' ? 'high' : '';
+  }
   function pyeongShort(m2) {
     return m2ToPyeong(m2) + '평(' + m2 + '㎡)';
   }
@@ -206,6 +211,7 @@
     pyeongStr: pyeongStr,
     pyeongShort: pyeongShort,
     floorTier: floorTier,
+    floorTierCls: floorTierCls,
     getLastNMonths: getLastNMonths,
     periodLabel: periodLabel,
     calcStats: calcStats,

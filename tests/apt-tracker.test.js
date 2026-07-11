@@ -29,6 +29,11 @@ test('floorTier — 저/중/고 (절대 층수 근사)', () => {
   assert.equal(L.floorTier('-'), '');        // 불명
   assert.equal(L.floorTier(0), '');
   assert.equal(L.floorTier(-1), '');         // 지하
+  // 색상 클래스
+  assert.equal(L.floorTierCls(3), 'low');
+  assert.equal(L.floorTierCls(10), 'mid');
+  assert.equal(L.floorTierCls(20), 'high');
+  assert.equal(L.floorTierCls('-'), '');
 });
 
 test('평형 변환', () => {
