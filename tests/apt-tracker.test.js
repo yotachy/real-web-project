@@ -95,21 +95,35 @@ test('escapeHtml — XSS 문자 이스케이프', () => {
   assert.equal(L.escapeHtml('래미안'), '래미안');
 });
 
-test('growthRate — 초기→최근 평단가 상승률, 3건 미만 null', () => {
-  assert.equal(L.growthRate([{ price: 100, area: 84 }, { price: 110, area: 84 }]), null); // 2건
+test('growthRate — 월별중앙값 회귀 추세선 기준', () => {
+  assert.equal(L.growthRate([{ price: 100, area: 84 }, { price: 110, area: 84 }]), null); // 2건 미만
   assert.equal(L.growthRate(null), null);
-  const txs = [
-    { price: 100000, area: 84, year: '2024', month: '01', day: '01' },
-    { price: 110000, area: 84, year: '2024', month: '02', day: '01' },
-    { price: 130000, area: 84, year: '2024', month: '03', day: '01' },
-    { price: 140000, area: 84, year: '2024', month: '04', day: '01' }
+
+  // 월당 1건, 100→110→120 (선형): 추세선 첫→끝 = 100→120 → 정확히 +20%
+  const linear = [
+    { price: 100000, area: 84, year: '2024', month: '01', day: '10' },
+    { price: 110000, area: 84, year: '2024', month: '02', day: '10' },
+    { price: 120000, area: 84, year: '2024', month: '03', day: '10' }
   ];
-  const g = L.growthRate(txs);
-  assert.ok(g > 0);   // 앞 절반보다 뒤 절반이 비쌈
-  const eAvg = L.avgPyeongPrice([txs[0], txs[1]]), lAvg = L.avgPyeongPrice([txs[2], txs[3]]);
-  assert.ok(Math.abs(g - (lAvg - eAvg) / eAvg * 100) < 1e-6);
-  // 정렬 무관(입력 순서 뒤섞여도 날짜로 정렬)
-  assert.ok(Math.abs(L.growthRate([txs[3], txs[0], txs[2], txs[1]]) - g) < 1e-9);
+  assert.ok(Math.abs(L.growthRate(linear) - 20) < 0.1);   // 평단가 반올림 오차 허용
+  // 입력 순서 무관 (동일 반올림 → 완전 동일)
+  assert.equal(L.growthRate([linear[2], linear[0], linear[1]]), L.growthRate(linear));
+
+  // 같은 달에 3건만 있으면 추세 산출 불가 → null
+  assert.equal(L.growthRate([
+    { price: 100000, area: 84, year: '2024', month: '03', day: '01' },
+    { price: 110000, area: 84, year: '2024', month: '03', day: '15' },
+    { price: 120000, area: 84, year: '2024', month: '03', day: '28' }
+  ]), null);
+
+  // 월 중앙값이 이상치를 완화: 2월 [110000,110000,900000] → median 110000
+  // jan median=100000, feb median=110000 → +10% (900000 무시됨)
+  assert.ok(Math.abs(L.growthRate([
+    { price: 100000, area: 84, year: '2024', month: '01', day: '10' },
+    { price: 110000, area: 84, year: '2024', month: '02', day: '05' },
+    { price: 110000, area: 84, year: '2024', month: '02', day: '12' },
+    { price: 900000, area: 84, year: '2024', month: '02', day: '20' }
+  ]) - 10) < 0.1);
 });
 
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {

@@ -124,16 +124,49 @@
 
   var dateKey = function (t) { return '' + t.year + t.month + t.day; };
 
-  // 기간 내 상승률(%): 초기 구간 평균 평단가 → 최근 구간 평균 평단가.
-  // 노이즈 방지로 3건 미만은 null. (짝수는 앞/뒤 절반, 홀수는 가운데 1건 제외)
+  function median(arr) {
+    if (!arr.length) return 0;
+    var s = arr.slice().sort(function (a, b) { return a - b; });
+    var m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+  // 월 인덱스(연*12+월-1) — 실제 시간 간격/공백을 보존
+  function monthIndex(t) {
+    return (parseInt(t.year, 10) || 0) * 12 + ((parseInt(t.month, 10) || 1) - 1);
+  }
+
+  // 기간 내 상승률(%): 월별 '중앙값 평단가'에 최소제곱 회귀선을 적합해
+  // 첫 관측월 → 마지막 관측월의 추세선 값 변화율을 반환.
+  //  - 월 중앙값: 같은 달 안의 층·향·급매 이상치를 완화(평균 대신 중앙값)
+  //  - 회귀: 끝점 2구간이 아니라 전체 관측월을 시간가중으로 반영
+  //  - 요구: 거래 3건 이상 + 관측 개월 2개 이상(추세 불가하면 null)
   function growthRate(txs) {
     if (!txs || txs.length < 3) return null;
-    var sorted = txs.slice().sort(function (a, b) { return dateKey(a).localeCompare(dateKey(b)); });
-    var mid = Math.floor(sorted.length / 2);
-    var e = avgPyeongPrice(sorted.slice(0, mid));
-    var l = avgPyeongPrice(sorted.slice(sorted.length - mid));
-    if (!e || !l) return null;
-    return (l - e) / e * 100;
+    var byMonth = {};
+    for (var i = 0; i < txs.length; i++) {
+      var u = pyeongUnitPrice(txs[i].price, txs[i].area);
+      if (u <= 0) continue;
+      var mi = monthIndex(txs[i]);
+      (byMonth[mi] = byMonth[mi] || []).push(u);
+    }
+    var pts = [];
+    for (var k in byMonth) if (byMonth.hasOwnProperty(k)) pts.push([parseInt(k, 10), median(byMonth[k])]);
+    if (pts.length < 2) return null;   // 관측 개월 2개 미만 → 추세 산출 불가
+    pts.sort(function (a, b) { return a[0] - b[0]; });
+    // 최소제곱 회귀 v = a + b*x  (x = 첫 관측월을 0 으로 이동한 월 인덱스)
+    var t0 = pts[0][0], n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (var j = 0; j < n; j++) {
+      var x = pts[j][0] - t0, y = pts[j][1];
+      sx += x; sy += y; sxx += x * x; sxy += x * y;
+    }
+    var denom = n * sxx - sx * sx;
+    if (denom === 0) return null;
+    var b = (n * sxy - sx * sy) / denom;
+    var a = (sy - b * sx) / n;
+    var span = pts[n - 1][0] - t0;
+    var fitStart = a, fitEnd = a + b * span;
+    if (fitStart <= 0) return null;
+    return (fitEnd - fitStart) / fitStart * 100;
   }
 
   // 평형 구간으로 필터 + 날짜 내림차순 정렬

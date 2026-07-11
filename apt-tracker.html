@@ -1196,11 +1196,18 @@ function renderDiscover(){
   const noteEl=document.getElementById('discover-note');
   const region=REGIONS.find(r=>r.code===discGu);
   let rows=discRows.slice();
-  if(discSort==='growth') rows.sort((a,b)=>(b.growth==null?-1e9:b.growth)-(a.growth==null?-1e9:a.growth));
-  else if(discSort==='count') rows.sort((a,b)=>b.count-a.count);
-  else rows.sort((a,b)=>b.avg-a.avg);
+  if(discSort==='growth'){
+    rows=rows.filter(r=>r.growth!=null);      // 추세 산출 가능(관측 2개월↑) 단지만
+    rows.sort((a,b)=>b.growth-a.growth);
+  } else if(discSort==='count'){
+    rows.sort((a,b)=>b.count-a.count);
+  } else {
+    rows.sort((a,b)=>b.avg-a.avg);
+  }
   discShown=rows.slice(0,30);
-  noteEl.textContent=`${region?region.name:''} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · 거래 3건 이상 ${rows.length}개 단지 · 상승률은 평단가 기준 근사치`;
+  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 2개월↑)'
+    : discSort==='count' ? '거래량순' : '평단가순';
+  noteEl.textContent=`${region?region.name:''} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
   if(!discShown.length){
     resultsEl.innerHTML=`<div class="tx-no">조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요). 조회 기간을 늘려보세요.</div>`;
     return;
