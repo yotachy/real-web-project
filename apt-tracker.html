@@ -16,16 +16,29 @@
   .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-top:4px;}
   .header-title{font-size:20px;font-weight:900;}.header-title span{color:var(--accent);}
   .header-sub{font-size:11px;color:var(--muted);margin-top:3px;}
-  /* 평형 그룹 카드 사이드바 (세로 리스트·고정 스크롤) */
-  .pyeong-groups{grid-area:cards;min-width:0;position:sticky;top:16px;max-height:calc(100vh - 24px);overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding-right:3px;}
+  /* 좌측 카드 컬럼 (툴바 + 스크롤 목록, 고정) */
+  .cards-col{grid-area:cards;min-width:0;position:sticky;top:16px;max-height:calc(100vh - 24px);display:flex;flex-direction:column;gap:10px;}
+  .cards-toolbar{display:flex;align-items:center;justify-content:space-between;padding:0 2px;flex-shrink:0;}
+  .cards-toolbar-title{font-size:12px;font-weight:800;color:var(--text);letter-spacing:.3px;}
+  .density-toggle{display:inline-flex;gap:2px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:2px;}
+  .density-btn{background:none;border:none;color:var(--muted2);font-size:11px;font-weight:700;padding:4px 11px;border-radius:6px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;}
+  .density-btn.active{background:var(--accent);color:#000;}
+  /* 평형 그룹 카드 목록 (세로 리스트) */
+  .pyeong-groups{min-width:0;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;padding-right:3px;}
   .pyeong-groups::-webkit-scrollbar{width:5px;}
   .pyeong-groups::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+  /* 밀도: 기본=컴팩트(상세부 숨김·타이트), 상세=전체 */
+  .card-detail{display:none;}
+  .pyeong-groups.detail .card-detail{display:block;}
+  .pyeong-groups.detail .pyeong-group-cards{gap:8px;}
+  .pyeong-groups.detail .apt-card{padding:12px 14px;}
+  .pyeong-groups.detail .card-head{margin-bottom:8px;}
   .pyeong-group{display:flex;flex-direction:column;gap:8px;}
   .pyeong-group-head{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.6px;padding:0 2px;}
   .pyeong-group-head .pg-count{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:var(--muted2);background:var(--card2);border:1px solid var(--border);border-radius:99px;padding:1px 7px;}
-  .pyeong-group-cards{display:flex;flex-direction:column;gap:8px;}
+  .pyeong-group-cards{display:flex;flex-direction:column;gap:6px;}
   /* 아파트 카드 (세로 리스트, 세련) */
-  .apt-card{position:relative;width:100%;background:linear-gradient(180deg,#0e1727,#0b1120);border:1px solid var(--border);border-radius:12px;cursor:pointer;padding:12px 14px;animation:fadeUp .3s ease both;transition:border-color .18s,transform .12s,box-shadow .18s;}
+  .apt-card{position:relative;width:100%;background:linear-gradient(180deg,#0e1727,#0b1120);border:1px solid var(--border);border-radius:12px;cursor:pointer;padding:9px 12px;animation:fadeUp .3s ease both;transition:border-color .18s,transform .12s,box-shadow .18s;}
   .apt-card:hover{border-color:var(--border2);transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.4);}
   .apt-card:active{transform:translateY(0);}
   /* 메인 2단 레이아웃 */
@@ -63,9 +76,9 @@
   .compare-hint{font-size:11px;color:var(--muted);text-align:center;padding:6px 0 10px;display:none;}
   .color-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
-  @media(max-width:900px){.main-layout{grid-template-columns:1fr;grid-template-areas:"cards" "chart";}.pyeong-groups{position:static;max-height:none;}.chart-panel{position:static;min-height:360px;}}
+  @media(max-width:900px){.main-layout{grid-template-columns:1fr;grid-template-areas:"cards" "chart";}.cards-col{position:static;max-height:none;}.pyeong-groups{overflow:visible;}.chart-panel{position:static;min-height:360px;}}
   /* 카드 헤더/바디 */
-  .card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+  .card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;}
   .card-apt-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.3;}
   .card-apt-region{font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .card-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;transition:color .15s;flex-shrink:0;}
@@ -220,6 +233,7 @@
   .card-sparkline{margin-top:8px;height:32px;width:100%;}
   /* 카드 날짜/층수 크기 업 */
   .card-price-date{font-size:11px;font-weight:500;color:var(--muted2);flex-shrink:0;}
+  .card-price-row>.card-price-date{margin-left:auto;}
   .card-price-date.muted{font-size:11px;font-weight:500;color:var(--muted);}
   @media(max-width:480px){#dashboard-screen{padding:16px 12px 80px;}.header-title{font-size:17px;}.period-btn{padding:6px 10px;font-size:12px;}}
   /* ── 보완: 카드 액션·배지·접근성·반응형 ───────────────────── */
@@ -316,8 +330,8 @@
         <button class="period-btn active" data-months="36" onclick="setPeriod(this)">3년</button>
         <button class="period-btn" data-months="60" onclick="setPeriod(this)">5년</button>
       </div>
-      <div class="budget-wrap" id="budget-wrap">
-        <input type="checkbox" class="budget-check" id="budget-check" onchange="onBudgetChange()">
+      <div class="budget-wrap active" id="budget-wrap">
+        <input type="checkbox" class="budget-check" id="budget-check" checked onchange="onBudgetChange()">
         <label class="budget-label" for="budget-check">예산</label>
         <input type="number" class="budget-input" id="budget-input" value="20" min="0" step="0.1"
           aria-label="예산 금액(억원)" oninput="onBudgetChange()" onchange="onBudgetChange()">
@@ -338,10 +352,19 @@
   <div id="watch-view">
   <!-- 좌: 카드(위)+광고(아래) / 우: 차트(고정) 2단 -->
   <div class="main-layout">
-    <!-- 평형 그룹 카드 영역 -->
-    <div class="pyeong-groups" id="pyeong-groups">
-      <div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
-        + 아파트 추가 버튼으로 관심 아파트를 추가하세요
+    <!-- 좌: 카드 사이드바 (밀도 토글 + 목록) -->
+    <div class="cards-col">
+      <div class="cards-toolbar">
+        <span class="cards-toolbar-title">관심 단지</span>
+        <div class="density-toggle" role="group" aria-label="카드 밀도">
+          <button class="density-btn active" data-density="compact" onclick="setDensity('compact')">기본</button>
+          <button class="density-btn" data-density="detail" onclick="setDensity('detail')">상세</button>
+        </div>
+      </div>
+      <div class="pyeong-groups" id="pyeong-groups">
+        <div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
+          + 아파트 추가 버튼으로 관심 아파트를 추가하세요
+        </div>
       </div>
     </div>
     <div class="chart-panel" id="chart-panel">
@@ -718,6 +741,14 @@ function renderGrid(){
     addBtn.title = full ? '최대 10개까지 추가 가능해요' : '';
   }
 }
+// 카드 밀도 (기본=컴팩트 / 상세). localStorage 기억. 'detail' 클래스는 재렌더에도 유지.
+function setDensity(mode){
+  const pg=document.getElementById('pyeong-groups');
+  if(pg) pg.classList.toggle('detail', mode==='detail');
+  document.querySelectorAll('.density-btn').forEach(b=>b.classList.toggle('active', b.dataset.density===mode));
+  try{ localStorage.setItem('apt_density', mode); }catch(e){}
+}
+
 // 스파크라인 SVG 생성 (최근 5건 추세)
 function renderSparkline(txs, color) {
   const pts = txs.slice(0, 5).reverse(); // 오래된 순 → 최신
@@ -767,7 +798,7 @@ function renderCard(apt, pyeong){
   const selIdx = getSeriesColorIdx(apt.id, pyeong);
   const selCls = selIdx >= 0 ? ` ${CHART_COLORS[selIdx].cls}` : '';
 
-  let priceHtml = '', statChips = '', hiloBadge = '';
+  let priceHtml = '', prevHtml = '', statChips = '', hiloBadge = '';
   if(!txMap){
     priceHtml = `<div style="font-size:11px;color:var(--muted);padding:4px 0"><span class="spinner" style="width:11px;height:11px;border-width:1.5px"></span> 조회중</div>`;
   } else {
@@ -784,21 +815,20 @@ function renderCard(apt, pyeong){
       const chgStr = chgVal===null?'-':`${chgIcon}${Math.abs(chgVal).toFixed(1)}%`;
       const latestDate = fmtDate(stats.latest.year, stats.latest.month, stats.latest.day);
       const prevDate = prevTx ? fmtDate(prevTx.year, prevTx.month, prevTx.day) : null;
+      // 컴팩트에서도 보이는 최근가 + 변동률
       priceHtml = `
         <div class="card-price-row">
-          <div class="card-price-label">최근</div>
           <div class="card-price-main">${formatPrice(stats.latest.price)}</div>
+          <span class="card-chg ${chgCls}">${chgStr}</span>
           <div class="card-price-date">${latestDate} · ${stats.latest.floor}층</div>
-        </div>
-        ${prevPriceStr ? `
+        </div>`;
+      // 상세부: 직전 거래
+      prevHtml = prevPriceStr ? `
         <div class="card-price-row card-price-row-prev">
           <div class="card-price-label muted">직전</div>
-          <div class="card-price-prev-val">
-            <span>${prevPriceStr}</span>
-            <span class="card-chg ${chgCls}">${chgStr}</span>
-          </div>
+          <div class="card-price-prev-val"><span>${prevPriceStr}</span></div>
           <div class="card-price-date muted">${prevDate} · ${prevTx.floor}층</div>
-        </div>` : `<div class="card-price-date muted" style="margin-top:4px">직전 거래 없음</div>`}`;
+        </div>` : `<div class="card-price-date muted" style="margin-top:4px">직전 거래 없음</div>`;
 
       // ── 타이밍·지역평균 지표 (A + C 1단계) ──
       const fh = Math.round(stats.fromHigh);              // 고점 대비 %(≤0)
@@ -845,8 +875,11 @@ function renderCard(apt, pyeong){
       </div>
     </div>
     ${priceHtml}
-    ${sparkSvg}
-    ${statChips}
+    <div class="card-detail">
+      ${prevHtml}
+      ${sparkSvg}
+      ${statChips}
+    </div>
   </div>`;
 }
 
@@ -1879,6 +1912,10 @@ document.addEventListener('keydown', e => {
   document.getElementById('add-modal').style.display='none';
   document.getElementById('detail-sheet').style.display='none';
   renderGrid();
+  // 카드 밀도 복원 (기본=컴팩트)
+  let density='compact';
+  try{ density=localStorage.getItem('apt_density')||'compact'; }catch(e){}
+  setDensity(density);
   if(apartments.length>0) refreshAll();
 })();
 </script>
