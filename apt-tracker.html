@@ -13,7 +13,7 @@
   ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
   #dashboard-screen{padding:20px 24px 60px;max-width:1600px;margin:0 auto;}
   /* 헤더 */
-  .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-top:4px;}
+  .header{display:flex;align-items:center;justify-content:space-between;gap:10px 12px;flex-wrap:wrap;margin-bottom:14px;padding-top:4px;}
   .header-title{font-size:20px;font-weight:900;}.header-title span{color:var(--accent);}
   .header-sub{font-size:11px;color:var(--muted);margin-top:3px;}
   /* 좌측 카드 컬럼 (툴바 + 스크롤 목록, 고정) */
@@ -51,9 +51,15 @@
   .chart-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--muted);gap:12px;}
   .chart-panel-empty-icon{font-size:40px;}
   .chart-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
-  .avg-toggles{display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0;}
-  .region-avg-toggle{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted2);cursor:pointer;white-space:nowrap;}
-  .region-avg-toggle input{accent-color:var(--accent);cursor:pointer;}
+  .avg-toggles{display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0;}
+  /* 토글 칩: 상태 점 + pill. 체크 시 골드 강조 */
+  .region-avg-toggle{position:relative;display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--muted2);cursor:pointer;white-space:nowrap;padding:5px 11px;border:1.5px solid var(--border);border-radius:99px;background:var(--card2);transition:border-color .15s,background .15s,color .15s;user-select:none;}
+  .region-avg-toggle input{position:absolute;opacity:0;width:0;height:0;pointer-events:none;}
+  .region-avg-toggle::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0;transition:all .15s;}
+  .region-avg-toggle:hover{border-color:var(--border2);color:var(--text);}
+  .region-avg-toggle:has(input:checked){border-color:var(--accent);background:var(--accent-dim);color:var(--accent);}
+  .region-avg-toggle:has(input:checked)::before{background:var(--accent);box-shadow:0 0 7px var(--accent);}
+  .region-avg-toggle:focus-within{outline:2px solid var(--accent);outline-offset:2px;}
   .chart-apt-name{font-size:16px;font-weight:700;}
   .chart-apt-sub{font-size:12px;color:var(--muted);margin-top:3px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
@@ -240,7 +246,33 @@
   .card-price-date{font-size:11px;font-weight:500;color:var(--muted2);flex-shrink:0;}
   .card-price-row>.card-price-date{margin-left:auto;}
   .card-price-date.muted{font-size:11px;font-weight:500;color:var(--muted);}
-  @media(max-width:480px){#dashboard-screen{padding:16px 12px 80px;}.header-title{font-size:17px;}.period-btn{padding:6px 10px;font-size:12px;}}
+  /* ── 반응형: PC · 태블릿 · 모바일 · 폴드 정교 대응 ── */
+  @media(max-width:1024px){ .main-layout{gap:14px;grid-template-columns:minmax(280px,330px) 1fr;} }
+  @media(max-width:900px){ #dashboard-screen{padding:18px 16px 72px;} }
+  @media(max-width:640px){
+    #dashboard-screen{padding:16px 12px 76px;}
+    .header-title{font-size:18px;}
+    .chart-header{flex-direction:column;align-items:stretch;gap:10px;}
+    .avg-toggles{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;}
+    .chart-header,.chart-tabs,.chart-body,.tx-list-header,.tx-item{padding-left:14px;padding-right:14px;}
+    .chart-svg-wrap{min-height:340px;}
+  }
+  @media(max-width:480px){
+    #dashboard-screen{padding:14px 10px 76px;}
+    .header-title{font-size:17px;}
+    .period-btn{padding:6px 9px;font-size:12px;}
+    .btn-add{padding:8px 12px;font-size:12px;}
+    .budget-wrap{padding:5px 9px;}
+    .modal-box{padding:22px 18px;}
+  }
+  @media(max-width:380px){
+    .header-title{font-size:16px;}
+    .period-btns{gap:4px;}.period-btn{padding:5px 7px;font-size:11px;}
+    .btn-add{padding:7px 10px;font-size:11px;}
+    .budget-input{width:48px;}
+    .apt-card{padding:8px 10px;}.card-price-main{font-size:19px;}
+    .region-avg-toggle{font-size:10px;padding:4px 9px;}
+  }
   /* ── 보완: 카드 액션·배지·접근성·반응형 ───────────────────── */
   .card-actions{display:flex;gap:2px;flex-shrink:0;margin-left:4px;}
   .card-icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 5px;border-radius:5px;transition:color .15s,background .15s;}
@@ -1427,7 +1459,10 @@ function addFromDiscover(idx){
 function onBudgetChange() {
   const chk = document.getElementById('budget-check');
   const wrap = document.getElementById('budget-wrap');
+  const val = document.getElementById('budget-input');
   if(wrap) wrap.classList.toggle('active', chk?.checked);
+  // 마지막 예산 값·체크 상태 저장(다음 방문에도 유지)
+  try{ localStorage.setItem('apt_budget', (val&&val.value)||''); localStorage.setItem('apt_budget_on', chk&&chk.checked?'1':'0'); }catch(e){}
   if(selectedAptIds.length) renderChart();
 }
 
@@ -2062,6 +2097,15 @@ document.addEventListener('keydown', e => {
   let density='compact';
   try{ density=localStorage.getItem('apt_density')||'compact'; }catch(e){}
   setDensity(density);
+  // 예산 값·체크 복원 (마지막 저장값 유지)
+  try{
+    const bv=localStorage.getItem('apt_budget');
+    const bon=localStorage.getItem('apt_budget_on');
+    const bi=document.getElementById('budget-input'), bc=document.getElementById('budget-check'), bw=document.getElementById('budget-wrap');
+    if(bv!==null && bv!=='' && bi) bi.value=bv;
+    if(bon!==null && bc) bc.checked=(bon==='1');
+    if(bw) bw.classList.toggle('active', bc && bc.checked);
+  }catch(e){}
   // 구 평균·추세선만 표시 복원
   try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; trendOnly=localStorage.getItem('apt_trend_only')==='1'; }catch(e){}
   const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
