@@ -297,6 +297,9 @@
   /* 차트 추세선(회귀) — 데이터 라인과 구분되게 깜빡이는 점선 */
   .trend-line{animation:trendBlink 1.5s ease-in-out infinite;}
   @keyframes trendBlink{0%,100%{opacity:.22}50%{opacity:.92}}
+  /* '추세선만' 모드: 추세선을 아주 선명하게(밝게 유지 + 강한 펄스) */
+  .trend-line.vivid{animation:trendBlinkVivid 1.1s ease-in-out infinite;}
+  @keyframes trendBlinkVivid{0%,100%{opacity:.7}50%{opacity:1}}
   .trend-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:2px;white-space:nowrap;}
   .trend-tag.up{background:rgba(52,211,153,.16);color:var(--up);}
   .trend-tag.down{background:rgba(248,113,113,.16);color:var(--down);}
@@ -405,6 +408,9 @@
             </label>
             <label class="region-avg-toggle" title="관심목록 중 그 구·평형 단지들의 월평균 실거래가 추이">
               <input type="checkbox" id="watch-avg-check" onchange="onWatchAvgChange()"> 관심 평균
+            </label>
+            <label class="region-avg-toggle" title="추세선만 선명하게, 나머지 선은 희미하게">
+              <input type="checkbox" id="trend-only-check" onchange="onTrendOnlyChange()"> 추세선만
             </label>
           </div>
         </div>
@@ -595,6 +601,7 @@ let regionAvg={};   // lawdCd -> { 평형키 -> 지역 평균 평단가(만원/�
 let regionData={};  // lawdCd -> regionAll(전체 거래)  (차트 '구 평균 추이'용)
 let showRegionAvg=false;   // 차트에 구 전체 평균 추이 표시 여부
 let showWatchAvg=false;    // 차트에 관심목록(그 구+평형) 평균 추이 표시 여부
+let trendOnly=false;       // '추세선만': 추세선 강조 + 나머지 선 희미하게
 // 지역 전체 거래(regionAll)에서 평형별 평균 평단가 산출 + 원본 보관
 function computeRegionAvg(lawdCd, regionAll){
   regionData[lawdCd]=regionAll;
@@ -636,6 +643,11 @@ function onRegionAvgChange(){
 function onWatchAvgChange(){
   showWatchAvg=document.getElementById('watch-avg-check').checked;
   try{ localStorage.setItem('apt_watch_avg', showWatchAvg?'1':'0'); }catch(e){}
+  if(selectedAptIds.length) renderChart();
+}
+function onTrendOnlyChange(){
+  trendOnly=document.getElementById('trend-only-check').checked;
+  try{ localStorage.setItem('apt_trend_only', trendOnly?'1':'0'); }catch(e){}
   if(selectedAptIds.length) renderChart();
 }
 let selectedAptIds = []; // [{aptId, pyeong}]
@@ -1712,7 +1724,7 @@ function renderChart() {
         const pct = pStart > 0 ? (pEnd - pStart) / pStart * 100 : 0;
         const cls = Math.abs(pct) < 3 ? 'flat' : pct > 0 ? 'up' : 'down';
         s.trend = { pct, cls, label: cls === 'flat' ? '횡보' : cls === 'up' ? '상승세' : '하락세' };
-        trendLines.push(`<line class="trend-line" x1="${xMin.toFixed(1)}" y1="${priceToY(pStart).toFixed(1)}" x2="${xMax.toFixed(1)}" y2="${priceToY(pEnd).toFixed(1)}" stroke="${c.line}" stroke-width="2.4" stroke-dasharray="0.1,7" stroke-linecap="round" filter="url(#trendGlow)"/>`);
+        trendLines.push(`<line class="trend-line${trendOnly?' vivid':''}" x1="${xMin.toFixed(1)}" y1="${priceToY(pStart).toFixed(1)}" x2="${xMax.toFixed(1)}" y2="${priceToY(pEnd).toFixed(1)}" stroke="${c.line}" stroke-width="${trendOnly?'4':'2.4'}" stroke-dasharray="${trendOnly?'0.1,5':'0.1,7'}" stroke-linecap="round" filter="url(#trendGlow)"/>`);
       }
     }
 
@@ -1814,12 +1826,14 @@ function renderChart() {
       ${xAxisLabels.join('')}
       <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
       <line x1="${pad.l}" y1="${(pad.t+ch).toFixed(1)}" x2="${(W-pad.r).toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
-      ${paths.join('')}
+      <g style="transition:opacity .25s" opacity="${trendOnly ? '0.12' : '1'}">
+        ${paths.join('')}
+        ${dots.join('')}
+        ${avgLabels.join('')}
+        ${maxLabels.join('')}
+        ${budgetLineEl}
+      </g>
       ${trendLines.join('')}
-      ${dots.join('')}
-      ${avgLabels.join('')}
-      ${maxLabels.join('')}
-      ${budgetLineEl}
       <!-- crosshair 수직선 -->
       <line id="chart-crosshair-line" x1="0" y1="${pad.t}" x2="0" y2="${(pad.t+ch).toFixed(1)}"
         stroke="#ffffff" stroke-width="1" stroke-dasharray="4,3" opacity="0"
@@ -2070,10 +2084,11 @@ document.addEventListener('keydown', e => {
   let density='compact';
   try{ density=localStorage.getItem('apt_density')||'compact'; }catch(e){}
   setDensity(density);
-  // 구/관심 평균 표시 복원
-  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; showWatchAvg=localStorage.getItem('apt_watch_avg')==='1'; }catch(e){}
+  // 구/관심 평균·추세선만 표시 복원
+  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; showWatchAvg=localStorage.getItem('apt_watch_avg')==='1'; trendOnly=localStorage.getItem('apt_trend_only')==='1'; }catch(e){}
   const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
   const _wac=document.getElementById('watch-avg-check'); if(_wac) _wac.checked=showWatchAvg;
+  const _toc=document.getElementById('trend-only-check'); if(_toc) _toc.checked=trendOnly;
   if(apartments.length>0) refreshAll();
 })();
 </script>
