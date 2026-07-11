@@ -233,3 +233,10 @@ test('평형 경계 — 전용 74~75㎡ 는 30평대(20평대 아님)', () => {
   assert.deepEqual(p30.sort((a, b) => a - b), [74, 75.99, 84.99]); // 73~98 (75.9 포함!)
   assert.equal(L.bucketByPyeong(txs, '40').map(t => t.area).sort((a, b) => a - b).join(','), '99,109.98');
 });
+
+test('평형 경계 — 40평대/50평이상 (전용 122㎡+ 는 50평대)', () => {
+  const mk = a => ({ area: a, year: '2024', month: '01', day: '01', price: 1 });
+  const txs = [mk(99), mk(114), mk(121.9), mk(122.44), mk(131.8), mk(134)];
+  assert.deepEqual(L.bucketByPyeong(txs, '40').map(t => t.area).sort((a, b) => a - b), [99, 114, 121.9]); // <122
+  assert.deepEqual(L.bucketByPyeong(txs, '50').map(t => t.area).sort((a, b) => a - b), [122.44, 131.8, 134]); // ≥122
+});

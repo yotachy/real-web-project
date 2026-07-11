@@ -50,7 +50,9 @@
   .chart-panel{grid-area:chart;min-width:0;background:var(--card);border:1px solid var(--border);border-radius:16px;position:sticky;top:16px;min-height:560px;display:flex;flex-direction:column;}
   .chart-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--muted);gap:12px;}
   .chart-panel-empty-icon{font-size:40px;}
-  .chart-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);}
+  .chart-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+  .region-avg-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted2);cursor:pointer;white-space:nowrap;flex-shrink:0;}
+  .region-avg-toggle input{accent-color:var(--accent);cursor:pointer;}
   .chart-apt-name{font-size:16px;font-weight:700;}
   .chart-apt-sub{font-size:12px;color:var(--muted);margin-top:3px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
@@ -392,8 +394,13 @@
       </div>
       <div id="chart-content" style="display:none;flex-direction:column;flex:1;">
         <div class="chart-header">
-          <div class="chart-apt-name" id="chart-apt-name">-</div>
-          <div class="chart-apt-sub" id="chart-apt-sub">-</div>
+          <div style="min-width:0">
+            <div class="chart-apt-name" id="chart-apt-name">-</div>
+            <div class="chart-apt-sub" id="chart-apt-sub">-</div>
+          </div>
+          <label class="region-avg-toggle" title="선택 단지가 속한 구·평형의 월별 평균 실거래가 추이를 함께 표시">
+            <input type="checkbox" id="region-avg-check" onchange="onRegionAvgChange()"> 구 평균
+          </label>
         </div>
         <div class="chart-tabs" id="chart-tabs"></div>
         <div class="compare-hint" id="compare-hint">💡 다른 아파트 카드를 클릭하면 최대 5개까지 비교할 수 있어요</div>
@@ -579,11 +586,31 @@ const CITIES = [...new Set(REGIONS.map(r => r.city))];
 // API 키는 서버(batch.php/server.py)에만 존재. 클라이언트는 batch.php 프록시만 호출.
 let apartments=[], transactions={}, newCounts={}, lastSeen={}, isRefreshing=false, selectedPyeongs=[];
 let regionAvg={};   // lawdCd -> { 평형키 -> 지역 평균 평단가(만원/평) }  (지역평균 대비용)
-// 지역 전체 거래(regionAll)에서 평형별 평균 평단가 산출 → 카드 '지역평균 대비'에 사용
+let regionData={};  // lawdCd -> regionAll(전체 거래)  (차트 '구 평균 추이'용)
+let showRegionAvg=false;   // 차트에 구 평균 추이 표시 여부
+// 지역 전체 거래(regionAll)에서 평형별 평균 평단가 산출 + 원본 보관
 function computeRegionAvg(lawdCd, regionAll){
+  regionData[lawdCd]=regionAll;
   const m={};
   ['10','20','30','40','50'].forEach(p=>{ m[p]=avgPyeongPrice(bucketByPyeong(regionAll, p)); });
   regionAvg[lawdCd]=m;
+}
+// 구+평형의 월별 평균 실거래가 → 차트 시리즈용 tx 배열
+function regionMonthlyAvg(lawdCd, pyeong){
+  const regionAll=regionData[lawdCd];
+  if(!regionAll) return [];
+  const bucket=bucketByPyeong(regionAll, pyeong);
+  const byMonth={};
+  bucket.forEach(t=>{ const k=t.year+t.month; if(!byMonth[k])byMonth[k]={s:0,n:0}; byMonth[k].s+=t.price; byMonth[k].n++; });
+  return Object.keys(byMonth).sort().map(k=>({
+    year:k.slice(0,4), month:k.slice(4,6), day:'15',
+    price:Math.round(byMonth[k].s/byMonth[k].n), floor:'평균', area:0
+  }));
+}
+function onRegionAvgChange(){
+  showRegionAvg=document.getElementById('region-avg-check').checked;
+  try{ localStorage.setItem('apt_region_avg', showRegionAvg?'1':'0'); }catch(e){}
+  if(selectedAptIds.length) renderChart();
 }
 let selectedAptIds = []; // [{aptId, pyeong}]
 let detailAptId=null, detailActivePyeong=null;
@@ -1501,6 +1528,25 @@ function renderChart() {
     };
   });
 
+  // 구 평균 추이 시리즈 (선택 단지의 구+평형별 월평균 실거래가) — 회색 벤치마크
+  if (showRegionAvg) {
+    const seen = new Set();
+    selectedAptIds.forEach(sel => {
+      const apt = apartments.find(a => a.id === sel.aptId);
+      if (!apt) return;
+      const key = apt.lawdCd + '_' + sel.pyeong;
+      if (seen.has(key)) return; seen.add(key);
+      const avgTxs = regionMonthlyAvg(apt.lawdCd, sel.pyeong);
+      if (avgTxs.length >= 2) {
+        series.push({
+          id: 'avg_' + key, apt: null, pyeong: sel.pyeong, txs: avgTxs, isAvg: true,
+          color: { line: '#8a94a6', area: 'rgba(138,148,166,0.10)' }, dashed: false,
+          label: `${(apt.regionName || '').split(' ').pop()} ${PYEONG_DEFS[sel.pyeong]?.label || ''} 평균`
+        });
+      }
+    });
+  }
+
   const allTxs = series.flatMap(s => s.txs);
   if (!allTxs.length) {
     wrap.innerHTML = `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">선택한 평형의 거래 내역 없음</div>`;
@@ -1613,10 +1659,10 @@ function renderChart() {
       : '';
 
     if (areaPath) paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
-    paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
+    paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="${s.isAvg ? '2.4' : '1.6'}"${s.isAvg ? ' opacity="0.85"' : ''} stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
 
     // ── 추세선 (좌표 선형 회귀) → 상승/횡보/하락 식별 + 깜빡이는 점선 ──
-    if (pts.length >= 2) {
+    if (pts.length >= 2 && !s.isAvg) {   // 구 평균 시리즈는 자체가 평균선이라 추세선 생략
       const fit = linreg(pts.map(p => ({ x: p.x, y: p.tx.price })));
       if (fit) {
         const xsArr = pts.map(p => p.x);
@@ -1633,7 +1679,7 @@ function renderChart() {
     // 최고가 포인트 찾기
     const maxPt = pts.reduce((best, p) => p.tx.price > best.tx.price ? p : best, pts[0]);
 
-    pts.forEach(p => {
+    if (!s.isAvg) pts.forEach(p => {   // 구 평균선은 점 없이 매끈하게
       const isMax = p === maxPt;
       // 거래 점 강조: 라인은 얇게, 점은 크고 또렷하게(배경색 링으로 분리)
       dots.push(`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}"
@@ -1642,7 +1688,8 @@ function renderChart() {
         class="chart-dot" data-series="${si}" data-idx="${pts.indexOf(p)}"/>`);
     });
 
-    // 최고가 라벨: 그래프 영역 완전 밖 상단에 고정 배치
+    // 최고가 라벨: 그래프 영역 완전 밖 상단에 고정 배치 (구 평균 제외)
+    if (!s.isAvg) {
     const lx = maxPt.x;
     const ly = maxPt.y;
     const labelText = formatPrice(maxPt.tx.price);
@@ -1679,6 +1726,7 @@ function renderChart() {
               font-size="10" font-family="IBM Plex Mono" font-weight="700"
               letter-spacing="0.3">${labelTag}</text>
       </g>`);
+    }
   });
 
   // 예산 수평선
@@ -1746,17 +1794,17 @@ function renderChart() {
 
   // 레전드 렌더 (색상 + 아파트명만)
   legendBar.innerHTML = series
-    .filter(s => s.apt)
+    .filter(s => s.apt || s.isAvg)
     .map(s => `
       <div class="chart-legend-item">
         <span class="chart-legend-dot" style="background:${s.color.line};${s.dashed ? 'outline:2px dashed '+s.color.line+';background:transparent;outline-offset:-2px' : ''}"></span>
-        <span style="${s.dashed ? 'opacity:0.8' : ''}">${s.label}</span>
+        <span style="${s.isAvg ? 'opacity:0.85;font-style:italic' : ''}">${s.label}</span>
         ${s.trend ? `<span class="trend-tag ${s.trend.cls}">${s.trend.label} ${s.trend.pct>=0?'+':''}${s.trend.pct.toFixed(0)}%</span>` : ''}
         ${!s.txs.length ? '<span style="font-size:10px;color:var(--muted);font-weight:400">(거래없음)</span>' : ''}
       </div>`).join('');
 
-  // 거래 목록 렌더
-  renderTxList(series);
+  // 거래 목록 렌더 (구 평균 제외 — 실제 거래만)
+  renderTxList(series.filter(s => !s.isAvg));
 }
 
 function renderTxList(series) {
@@ -1981,6 +2029,9 @@ document.addEventListener('keydown', e => {
   let density='compact';
   try{ density=localStorage.getItem('apt_density')||'compact'; }catch(e){}
   setDensity(density);
+  // 구 평균 표시 복원
+  try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; }catch(e){}
+  const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
   if(apartments.length>0) refreshAll();
 })();
 </script>
