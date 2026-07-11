@@ -291,6 +291,13 @@
   .floor-tier.low{background:rgba(96,165,250,.16);color:var(--blue);}
   .floor-tier.mid{background:rgba(148,163,184,.15);color:#94a3b8;}
   .floor-tier.high{background:var(--accent-dim);color:var(--accent);}
+  /* 차트 추세선(회귀) — 데이터 라인과 구분되게 깜빡이는 점선 */
+  .trend-line{animation:trendBlink 1.5s ease-in-out infinite;}
+  @keyframes trendBlink{0%,100%{opacity:.22}50%{opacity:.92}}
+  .trend-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:2px;white-space:nowrap;}
+  .trend-tag.up{background:rgba(52,211,153,.16);color:var(--up);}
+  .trend-tag.down{background:rgba(248,113,113,.16);color:var(--down);}
+  .trend-tag.flat{background:rgba(148,163,184,.15);color:#94a3b8;}
   /* 아파트 추가 모달: 크게 + 시/도·구/군 2열 + 자주선택 pill */
   .modal-box-lg{max-width:560px;}
   .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
@@ -1572,6 +1579,7 @@ function renderChart() {
   const defs = [];
   const paths = [];
   const dots = [];
+  const trendLines = [];  // 회귀 추세선(깜빡임)
   const maxLabels = [];  // 최고가 라벨
 
   series.forEach((s, si) => {
@@ -1597,6 +1605,21 @@ function renderChart() {
 
     if (areaPath) paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
     paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
+
+    // ── 추세선 (좌표 선형 회귀) → 상승/횡보/하락 식별 + 깜빡이는 점선 ──
+    if (pts.length >= 2) {
+      const fit = linreg(pts.map(p => ({ x: p.x, y: p.tx.price })));
+      if (fit) {
+        const xsArr = pts.map(p => p.x);
+        const xMin = Math.min(...xsArr), xMax = Math.max(...xsArr);
+        const pStart = fit.intercept + fit.slope * xMin;
+        const pEnd = fit.intercept + fit.slope * xMax;
+        const pct = pStart > 0 ? (pEnd - pStart) / pStart * 100 : 0;
+        const cls = Math.abs(pct) < 3 ? 'flat' : pct > 0 ? 'up' : 'down';
+        s.trend = { pct, cls, label: cls === 'flat' ? '횡보' : cls === 'up' ? '상승세' : '하락세' };
+        trendLines.push(`<line class="trend-line" x1="${xMin.toFixed(1)}" y1="${priceToY(pStart).toFixed(1)}" x2="${xMax.toFixed(1)}" y2="${priceToY(pEnd).toFixed(1)}" stroke="${c.line}" stroke-width="1.6" stroke-dasharray="7,5"/>`);
+      }
+    }
 
     // 최고가 포인트 찾기
     const maxPt = pts.reduce((best, p) => p.tx.price > best.tx.price ? p : best, pts[0]);
@@ -1695,6 +1718,7 @@ function renderChart() {
       <line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
       <line x1="${pad.l}" y1="${(pad.t+ch).toFixed(1)}" x2="${(W-pad.r).toFixed(1)}" y2="${(pad.t+ch).toFixed(1)}" stroke="#2a3550" stroke-width="1"/>
       ${paths.join('')}
+      ${trendLines.join('')}
       ${dots.join('')}
       ${maxLabels.join('')}
       ${budgetLineEl}
@@ -1718,6 +1742,7 @@ function renderChart() {
       <div class="chart-legend-item">
         <span class="chart-legend-dot" style="background:${s.color.line};${s.dashed ? 'outline:2px dashed '+s.color.line+';background:transparent;outline-offset:-2px' : ''}"></span>
         <span style="${s.dashed ? 'opacity:0.8' : ''}">${s.label}</span>
+        ${s.trend ? `<span class="trend-tag ${s.trend.cls}">${s.trend.label} ${s.trend.pct>=0?'+':''}${s.trend.pct.toFixed(0)}%</span>` : ''}
         ${!s.txs.length ? '<span style="font-size:10px;color:var(--muted);font-weight:400">(거래없음)</span>' : ''}
       </div>`).join('');
 

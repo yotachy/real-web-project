@@ -164,6 +164,18 @@ test('growthRate — 월별중앙값 회귀 추세선 기준', () => {
   ]) - 20) < 0.1);
 });
 
+test('linreg — 최소제곱 회귀선', () => {
+  assert.equal(L.linreg([{ x: 1, y: 1 }]), null);            // 2점 미만
+  assert.equal(L.linreg([{ x: 1, y: 5 }, { x: 1, y: 9 }]), null); // 수직(동일 x)
+  // y = 2x + 1 완전선형
+  const f = L.linreg([{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }]);
+  assert.ok(Math.abs(f.slope - 2) < 1e-9);
+  assert.ok(Math.abs(f.intercept - 1) < 1e-9);
+  // 하락 추세
+  const d = L.linreg([{ x: 0, y: 10 }, { x: 1, y: 8 }, { x: 2, y: 6 }]);
+  assert.ok(d.slope < 0);
+});
+
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {
   // batch.php 가 돌려주는 형태를 fetchBatchChunk 가 변환한 tx 배열
   const regionAll = [

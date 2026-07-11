@@ -193,6 +193,21 @@
     return (fitEnd - fitStart) / fitStart * 100;
   }
 
+  // 선형 회귀(최소제곱): pts=[{x,y}] → {slope,intercept}. 2점 미만/수직이면 null.
+  // 차트 추세선용 — 좌표를 조합해 상승/횡보/하락 판정 + 추세선 그리기.
+  function linreg(pts) {
+    if (!pts || pts.length < 2) return null;
+    var n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (var i = 0; i < n; i++) {
+      var x = pts[i].x, y = pts[i].y;
+      sx += x; sy += y; sxx += x * x; sxy += x * y;
+    }
+    var d = n * sxx - sx * sx;
+    if (d === 0) return null;
+    var slope = (n * sxy - sx * sy) / d;
+    return { slope: slope, intercept: (sy - slope * sx) / n };
+  }
+
   // 평형 구간으로 필터 + 날짜 내림차순 정렬
   function bucketByPyeong(txs, pyeongKey) {
     var def = PYEONG_DEFS[pyeongKey];
@@ -223,7 +238,8 @@
     sameApt: sameApt,
     matchByName: matchByName,
     bucketByPyeong: bucketByPyeong,
-    growthRate: growthRate
+    growthRate: growthRate,
+    linreg: linreg
   };
 
   if (typeof module !== 'undefined' && module.exports) {
