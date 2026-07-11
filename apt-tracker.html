@@ -1176,7 +1176,8 @@ function commitApt(region, exactName, dong, pyeongs, allTxs){
 
 // ─── 발굴 랭킹 (구 전체 단지 순위) ───────────────────────────────
 let currentMode='watch';
-let discCity='서울특별시', discGu='', discPyeong='30', discSort='growth';
+const DISC_DEFAULT_GU='11590';   // 동작구
+let discCity='서울특별시', discGu='', discPyeong='30', discSort='avg';  // 기본: 서울 동작구 30평대 평단가순
 let discCache={};   // `${gu}_${period}` -> regionAll
 let discRows=[];    // 현재 구·평형의 계산 결과
 let discShown=[];   // 정렬·TOP 적용된 렌더 대상 (관심추가 인덱스 참조)
@@ -1207,6 +1208,10 @@ function initDiscover(){
   cityEl.innerHTML=CITIES.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   cityEl.value=discCity;
   updateDiscGu(discCity);
+  // 기본 구: 동작구 (서울일 때)
+  const guEl=document.getElementById('disc-gu');
+  if([...guEl.options].some(o=>o.value===DISC_DEFAULT_GU)){ guEl.value=DISC_DEFAULT_GU; discGu=DISC_DEFAULT_GU; }
+  document.getElementById('disc-sort').value=discSort;   // 기본 평단가순
   renderDiscPyeong();
 }
 function updateDiscGu(city){
