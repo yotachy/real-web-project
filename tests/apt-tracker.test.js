@@ -134,6 +134,24 @@ test('growthRate — 월별중앙값 회귀 추세선 기준', () => {
   ]) - 20) < 0.1);
 });
 
+test('growthRateSimple — 간이 상승률(앞/뒤 절반), 2건 이상', () => {
+  assert.equal(L.growthRateSimple([{ price: 100, area: 84 }]), null); // 1건
+  assert.equal(L.growthRateSimple(null), null);
+  // 2건: 100000 → 120000 (동일면적) → +20%
+  assert.ok(Math.abs(L.growthRateSimple([
+    { price: 100000, area: 84, year: '2024', month: '02', day: '05' },
+    { price: 120000, area: 84, year: '2024', month: '02', day: '20' }
+  ]) - 20) < 0.1);
+  // 3개월 조회에서 추세는 null 이지만 간이는 산출됨 (같은 달 2건)
+  const twoMonthCluster = [
+    { price: 100000, area: 84, year: '2024', month: '01', day: '10' },
+    { price: 110000, area: 84, year: '2024', month: '01', day: '20' },
+    { price: 120000, area: 84, year: '2024', month: '02', day: '05' }
+  ];
+  assert.equal(L.growthRate(twoMonthCluster), null);       // 관측 2개월 → 추세 불가
+  assert.ok(L.growthRateSimple(twoMonthCluster) > 0);      // 간이는 가능
+});
+
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {
   // batch.php 가 돌려주는 형태를 fetchBatchChunk 가 변환한 tx 배열
   const regionAll = [

@@ -169,6 +169,19 @@
     return (fitEnd - fitStart) / fitStart * 100;
   }
 
+  // 간이(단기) 상승률(%): 회귀(3개월↑)가 불가한 짧은 데이터용 근사.
+  // 날짜순 앞 절반 평균 평단가 → 뒤 절반 평균 평단가. 거래 2건 이상.
+  // 추세선보다 노이즈에 약하므로 UI 에서 '≈'·별도 그룹으로 구분해 표기.
+  function growthRateSimple(txs) {
+    if (!txs || txs.length < 2) return null;
+    var sorted = txs.slice().sort(function (a, b) { return dateKey(a).localeCompare(dateKey(b)); });
+    var mid = Math.floor(sorted.length / 2);
+    var e = avgPyeongPrice(sorted.slice(0, mid));
+    var l = avgPyeongPrice(sorted.slice(sorted.length - mid));
+    if (!e || !l) return null;
+    return (l - e) / e * 100;
+  }
+
   // 평형 구간으로 필터 + 날짜 내림차순 정렬
   function bucketByPyeong(txs, pyeongKey) {
     var def = PYEONG_DEFS[pyeongKey];
@@ -195,7 +208,8 @@
     escapeHtml: escapeHtml,
     matchByName: matchByName,
     bucketByPyeong: bucketByPyeong,
-    growthRate: growthRate
+    growthRate: growthRate,
+    growthRateSimple: growthRateSimple
   };
 
   if (typeof module !== 'undefined' && module.exports) {

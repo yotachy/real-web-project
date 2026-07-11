@@ -261,6 +261,10 @@
   .disc-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
+  .disc-growth.simple{opacity:.75;font-style:italic;}
+  .disc-group-head{font-size:11px;font-weight:800;color:var(--muted2);letter-spacing:.3px;margin:16px 0 8px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .disc-group-head:first-child{margin-top:2px;}
+  .disc-group-head span{font-size:10px;font-weight:500;color:var(--muted);}
   .disc-add{background:var(--accent);color:#000;border:none;padding:7px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:opacity .15s;}
   .disc-add:hover{opacity:.88;}
   .disc-add:disabled{background:var(--card2);color:var(--muted);cursor:default;border:1px solid var(--border);}
@@ -1184,10 +1188,31 @@ function computeAndRenderDiscover(){
     const stats=calcStats(bucket);
     const avg=avgPyeongPrice(bucket);
     discRows.push({ name, latest:stats.latest.price, count:bucket.length,
-      growth:growthRate(bucket), avg,
+      growth:growthRate(bucket), growthSimple:growthRateSimple(bucket), avg,
       regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
   });
   renderDiscover();
+}
+
+// 한 행 렌더 (idx=discShown 내 위치, rank=그룹 내 표시순위)
+function discRowHtml(r, idx, rank){
+  const basis = r.growth!=null ? 'trend' : (r.growthSimple!=null ? 'simple' : 'none');
+  const val = basis==='trend' ? r.growth : basis==='simple' ? r.growthSimple : null;
+  const gStr = val==null ? '-' : `${basis==='simple'?'≈':''}${val>=0?'+':''}${val.toFixed(1)}%`;
+  const gCls = val==null ? 'neu-color' : val>=0 ? 'up-color' : 'down-color';
+  const gTitle = basis==='simple' ? '간이 추정: 첫↔최근 거래 평단가 (관측 3개월 미만)'
+    : basis==='trend' ? '추세: 월별 중앙값 평단가 회귀' : '';
+  const already = apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && a.pyeongs.includes(discPyeong));
+  const rd = r.regionDiff==null ? '' : `· <span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`;
+  return `<div class="disc-row">
+    <div class="disc-rank">${rank}</div>
+    <div class="disc-main">
+      <div class="disc-name">${escapeHtml(r.name)} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
+      <div class="disc-meta">최근 ${formatPrice(r.latest)} · ${r.count}건 · ${r.avg.toLocaleString()}만/평 ${rd}</div>
+    </div>
+    <div class="disc-growth ${gCls}${basis==='simple'?' simple':''}" title="${gTitle}">${gStr}</div>
+    <button class="disc-add" ${already?'disabled':''} onclick="addFromDiscover(${idx})">${already?'추가됨':'＋관심'}</button>
+  </div>`;
 }
 
 function renderDiscover(){
@@ -1195,38 +1220,42 @@ function renderDiscover(){
   const resultsEl=document.getElementById('discover-results');
   const noteEl=document.getElementById('discover-note');
   const region=REGIONS.find(r=>r.code===discGu);
-  let rows=discRows.slice();
+  const regionName=region?region.name:'';
+
   if(discSort==='growth'){
-    rows=rows.filter(r=>r.growth!=null);      // 추세 산출 가능(관측 2개월↑) 단지만
-    rows.sort((a,b)=>b.growth-a.growth);
-  } else if(discSort==='count'){
-    rows.sort((a,b)=>b.count-a.count);
-  } else {
-    rows.sort((a,b)=>b.avg-a.avg);
-  }
-  discShown=rows.slice(0,30);
-  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
-    : discSort==='count' ? '거래량순' : '평단가순';
-  noteEl.textContent=`${region?region.name:''} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
-  if(!discShown.length){
-    resultsEl.innerHTML=`<div class="tx-no">조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요). 조회 기간을 늘려보세요.</div>`;
+    // 추세(회귀 가능) + 간이(추세 불가하나 간이 가능) 두 그룹 — 3개월 조회 시 대안 제공
+    const trend=discRows.filter(r=>r.growth!=null).sort((a,b)=>b.growth-a.growth).slice(0,30);
+    const simple=discRows.filter(r=>r.growth==null && r.growthSimple!=null).sort((a,b)=>b.growthSimple-a.growthSimple).slice(0,20);
+    discShown=trend.concat(simple);   // addFromDiscover(idx) 참조
+    noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · 상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑) · ≈는 간이 추정`;
+    if(!discShown.length){
+      resultsEl.innerHTML=`<div class="tx-no">조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요). 조회 기간을 늘려보세요.</div>`;
+      return;
+    }
+    let html='';
+    if(trend.length){
+      html+=`<div class="disc-group-head">추세 상승률 <span>관측 3개월↑ · 회귀</span></div>`;
+      html+=trend.map((r,i)=>discRowHtml(r, i, i+1)).join('');
+    }
+    if(simple.length){
+      html+=`<div class="disc-group-head">단기 상승 <span>관측 3개월 미만 · 간이 추정(≈)</span></div>`;
+      html+=simple.map((r,i)=>discRowHtml(r, trend.length+i, i+1)).join('');
+    }
+    resultsEl.innerHTML=html;
     return;
   }
-  resultsEl.innerHTML=discShown.map((r,i)=>{
-    const already=apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && a.pyeongs.includes(discPyeong));
-    const gStr=r.growth==null?'-':`${r.growth>=0?'+':''}${r.growth.toFixed(1)}%`;
-    const gCls=r.growth==null?'neu-color':r.growth>=0?'up-color':'down-color';
-    const rd=r.regionDiff==null?'':`· <span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`;
-    return `<div class="disc-row">
-      <div class="disc-rank">${i+1}</div>
-      <div class="disc-main">
-        <div class="disc-name">${escapeHtml(r.name)} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
-        <div class="disc-meta">최근 ${formatPrice(r.latest)} · ${r.count}건 · ${r.avg.toLocaleString()}만/평 ${rd}</div>
-      </div>
-      <div class="disc-growth ${gCls}">${gStr}</div>
-      <button class="disc-add" ${already?'disabled':''} onclick="addFromDiscover(${i})">${already?'추가됨':'＋관심'}</button>
-    </div>`;
-  }).join('');
+
+  // 거래량 / 평단가순: 단일 리스트
+  let rows=discRows.slice();
+  if(discSort==='count') rows.sort((a,b)=>b.count-a.count);
+  else rows.sort((a,b)=>b.avg-a.avg);
+  discShown=rows.slice(0,30);
+  noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${discSort==='count'?'거래량순':'평단가순'}`;
+  if(!discShown.length){
+    resultsEl.innerHTML=`<div class="tx-no">조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).</div>`;
+    return;
+  }
+  resultsEl.innerHTML=discShown.map((r,i)=>discRowHtml(r, i, i+1)).join('');
 }
 
 function addFromDiscover(idx){
