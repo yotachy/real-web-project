@@ -263,6 +263,18 @@
   .disc-meta{font-size:11px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .disc-growth{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:800;white-space:nowrap;}
   .disc-dong,.ac-dong{font-size:11px;font-weight:500;color:var(--muted);}
+  /* 아파트 추가 모달: 크게 + 시/도·구/군 2열 + 자주선택 pill */
+  .modal-box-lg{max-width:560px;}
+  .form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
+  .quick-pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:18px;}
+  .quick-pills-label{font-size:11px;color:var(--muted);margin-right:2px;}
+  .quick-pill{background:#0d1422;border:1.5px solid var(--border);color:var(--muted2);padding:6px 12px;border-radius:99px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s;white-space:nowrap;}
+  .quick-pill:hover{border-color:var(--accent);color:var(--accent);}
+  @media(max-width:520px){
+    .form-row-2{grid-template-columns:1fr;gap:0;}
+    .form-row-2 .form-group{margin-bottom:18px !important;}
+    .modal-box-lg{max-width:100%;}
+  }
   .disc-add{background:var(--accent);color:#000;border:none;padding:7px 12px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:opacity .15s;}
   .disc-add:hover{opacity:.88;}
   .disc-add:disabled{background:var(--card2);color:var(--muted);cursor:default;border:1px solid var(--border);}
@@ -399,19 +411,22 @@
 
 
 <!-- ADD MODAL -->
-<div class="modal-backdrop" id="add-modal" onclick="backdropClose(event,'add-modal')">
-  <div class="modal-box" role="dialog" aria-modal="true" aria-label="아파트 추가">
+<div class="modal-backdrop" id="add-modal" onmousedown="onBackdropDown(event)" onclick="backdropClose(event,'add-modal')">
+  <div class="modal-box modal-box-lg" role="dialog" aria-modal="true" aria-label="아파트 추가">
     <div class="modal-head">
       <span class="modal-title">아파트 추가</span>
       <button class="modal-close" aria-label="닫기" onclick="closeModal('add-modal')">×</button>
     </div>
-    <div class="form-group">
-      <label class="form-label">시 / 도 선택 <span class="req">*</span></label>
-      <select id="city-select" style="height:44px" onchange="onCityChange()"></select>
-    </div>
-    <div class="form-group">
-      <label class="form-label">구 / 군 선택 <span class="req">*</span></label>
-      <select id="region-select" style="height:44px;opacity:0.4;cursor:not-allowed;" disabled onchange="onGuChange()"></select>
+    <div class="quick-pills" id="quick-region-pills"></div>
+    <div class="form-row-2">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">시 / 도 <span class="req">*</span></label>
+        <select id="city-select" style="height:44px" onchange="onCityChange()"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">구 / 군 <span class="req">*</span></label>
+        <select id="region-select" style="height:44px;opacity:0.4;cursor:not-allowed;" disabled onchange="onGuChange()"></select>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">아파트 이름 <span class="req">*</span></label>
@@ -442,7 +457,7 @@
 </div>
 
 <!-- DETAIL SHEET -->
-<div class="sheet-backdrop" id="detail-sheet" onclick="backdropClose(event,'detail-sheet')">
+<div class="sheet-backdrop" id="detail-sheet" onmousedown="onBackdropDown(event)" onclick="backdropClose(event,'detail-sheet')">
   <div class="sheet-box" role="dialog" aria-modal="true" aria-label="실거래 상세 내역">
     <div class="sheet-head">
       <div class="sheet-head-top">
@@ -909,8 +924,39 @@ function onGuChange() {
   resetAptInput(true);
 }
 
+// ── 자주 선택 지역 pill (사용 빈도 추적 + 기본값 시드) ───────────
+const DEFAULT_REGION_PILLS=['11680','11650','11710','41135','11440']; // 강남·서초·송파·분당·마포
+function loadRegionUsage(){ try{ return JSON.parse(localStorage.getItem('apt_region_usage')||'{}'); }catch(e){ return {}; } }
+function bumpRegionUsage(code){
+  const u=loadRegionUsage(); u[code]=(u[code]||0)+1;
+  try{ localStorage.setItem('apt_region_usage', JSON.stringify(u)); }catch(e){}
+}
+function topRegionPills(n){
+  const u=loadRegionUsage();
+  const used=Object.keys(u).filter(c=>REGIONS.some(r=>r.code===c)).sort((a,b)=>u[b]-u[a]);
+  const ordered=[...used];
+  DEFAULT_REGION_PILLS.forEach(c=>{ if(!ordered.includes(c)) ordered.push(c); });
+  return ordered.slice(0,n);
+}
+function renderQuickPills(){
+  const el=document.getElementById('quick-region-pills'); if(!el) return;
+  el.innerHTML='<span class="quick-pills-label">자주 선택</span>'+topRegionPills(5).map(c=>{
+    const r=REGIONS.find(x=>x.code===c); if(!r) return '';
+    return `<button class="quick-pill" onclick="pickRegionPill('${c}')">${escapeHtml(r.name)}</button>`;
+  }).join('');
+}
+function pickRegionPill(code){
+  const r=REGIONS.find(x=>x.code===code); if(!r) return;
+  const cityEl=document.getElementById('city-select');
+  if(cityEl){ cityEl.value=r.city; updateGuSelect(r.city); }
+  const guEl=document.getElementById('region-select');
+  if(guEl) guEl.value=code;
+  resetAptInput(true);   // 입력 활성 + 포커스
+}
+
 function openAddModal(){
   if(apartments.length >= 10){ toast('⚠ 아파트는 최대 10개까지 추가할 수 있어요', 3500); return; }
+  renderQuickPills();   // 자주 선택 지역 pill
   // 시/도 서울 기본값으로 리셋
   const cityEl2 = document.getElementById('city-select');
   if(cityEl2){ cityEl2.value = '서울특별시'; updateGuSelect('서울특별시'); }
@@ -1102,6 +1148,7 @@ function commitApt(region, exactName, dong, pyeongs, allTxs){
   newCounts[apt.id]=0;   // 방금 추가·조회한 것이므로 '신규' 아님
   lastSeen[apt.id]=new Set(flat.map(t=>t.id));
   saveApts(); saveSeen();
+  bumpRegionUsage(region.code);   // '자주 선택' pill 빈도 반영
   return apt;
 }
 
@@ -1819,7 +1866,14 @@ function renderDetailBody(aptId,p){
 
 function openModal(id){const el=document.getElementById(id);el.style.display='flex';requestAnimationFrame(()=>el.classList.add('show'));}
 function closeModal(id){const el=document.getElementById(id);el.classList.remove('show');setTimeout(()=>{el.style.display='none';},220);}
-function backdropClose(e,id){if(e.target===e.currentTarget)closeModal(id);}
+// 백드롭에서 '눌러서(mousedown) 뗀(click)' 경우에만 닫기.
+// (모달 안에서 드래그하다 커서가 백드롭으로 나가며 뗄 때 닫히던 문제 방지)
+let backdropDownTarget=null;
+function onBackdropDown(e){ backdropDownTarget=e.target; }
+function backdropClose(e,id){
+  if(e.target===e.currentTarget && backdropDownTarget===e.currentTarget) closeModal(id);
+  backdropDownTarget=null;
+}
 // ESC 로 열린 모달/시트 닫기
 document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
