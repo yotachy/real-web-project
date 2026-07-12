@@ -2107,7 +2107,7 @@ function renderChart() {
       avgLabels.push(`<text x="${(lp.x - 4).toFixed(1)}" y="${(lp.y - 6).toFixed(1)}" text-anchor="end" fill="${c.line}" font-size="10" font-weight="700" font-family="'Noto Sans KR',sans-serif" style="paint-order:stroke" stroke="${T.halo}" stroke-width="3">${escapeHtml(s.endLabel)}</text>`);
     }
 
-    // ── 추세선 (좌표 선형 회귀) → 상승/횡보/하락 식별 + 깜빡이는 점선 ──
+    // ── 추세선: LOESS 국소가중회귀 스무딩 곡선(데이터 굴곡 반영) + 넷 방향 배지 ──
     if (pts.length >= 2 && !s.isAvg) {   // 구 평균 시리즈는 자체가 평균선이라 추세선 생략
       const fit = linreg(pts.map(p => ({ x: p.x, y: p.tx.price })));
       if (fit) {
@@ -2115,10 +2115,17 @@ function renderChart() {
         const xMin = Math.min(...xsArr), xMax = Math.max(...xsArr);
         const pStart = fit.intercept + fit.slope * xMin;
         const pEnd = fit.intercept + fit.slope * xMax;
+        // 배지(상승/횡보/하락 %)는 전체 회귀 기준의 '넷 추세'로 안정적으로 산출
         const pct = pStart > 0 ? (pEnd - pStart) / pStart * 100 : 0;
         const cls = Math.abs(pct) < 3 ? 'flat' : pct > 0 ? 'up' : 'down';
         s.trend = { pct, cls, label: cls === 'flat' ? '횡보' : cls === 'up' ? '상승세' : '하락세' };
-        trendLines.push(`<line class="trend-line${trendOnly?' vivid':''}" x1="${xMin.toFixed(1)}" y1="${priceToY(pStart).toFixed(1)}" x2="${xMax.toFixed(1)}" y2="${priceToY(pEnd).toFixed(1)}" stroke="${c.line}" stroke-width="${trendOnly?'4':'2.4'}" stroke-dasharray="${trendOnly?'0.1,5':'0.1,7'}" stroke-linecap="round" filter="url(#trendGlow)"/>`);
+        // 그려지는 곡선은 LOESS: 점이 적을수록 창을 넓혀(과적합 방지) 매끈하게
+        const span = pts.length <= 6 ? 0.9 : pts.length <= 12 ? 0.65 : 0.5;
+        const sm = loess(pts.map(p => ({ x: p.x, y: p.tx.price })), span, 44);
+        const tPath = (sm && sm.length >= 2)
+          ? sm.map((q, qi) => `${qi === 0 ? 'M' : 'L'}${q.x.toFixed(1)},${priceToY(q.y).toFixed(1)}`).join(' ')
+          : `M${xMin.toFixed(1)},${priceToY(pStart).toFixed(1)} L${xMax.toFixed(1)},${priceToY(pEnd).toFixed(1)}`;
+        trendLines.push(`<path class="trend-line${trendOnly?' vivid':''}" d="${tPath}" fill="none" stroke="${c.line}" stroke-width="${trendOnly?'4':'2.4'}" stroke-dasharray="${trendOnly?'0.1,5':'0.1,7'}" stroke-linecap="round" stroke-linejoin="round" filter="url(#trendGlow)"/>`);
       }
     }
 

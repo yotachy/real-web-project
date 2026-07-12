@@ -187,6 +187,22 @@ test('linreg — 최소제곱 회귀선', () => {
   assert.ok(d.slope < 0);
 });
 
+test('loess — 국소 가중회귀 스무딩 곡선', () => {
+  assert.deepEqual(L.loess([{ x: 1, y: 2 }]), [{ x: 1, y: 2 }]);   // 3점 미만: 원본 반환
+  // 완전선형이면 스무딩해도 선형 유지(끝점 값 근사)
+  const lin = [];
+  for (let i = 0; i <= 10; i++) lin.push({ x: i, y: 2 * i + 1 });
+  const sm = L.loess(lin, 0.6, 20);
+  assert.equal(sm.length, 21);                 // steps+1
+  assert.ok(Math.abs(sm[0].y - 1) < 0.5);      // x=0 → ~1
+  assert.ok(Math.abs(sm[20].y - 21) < 0.5);    // x=10 → ~21
+  // 곡선(V자)이면 중간이 끝점보다 낮게 → 직선회귀와 달리 굴곡 반영
+  const v = [{x:0,y:10},{x:1,y:6},{x:2,y:3},{x:3,y:2},{x:4,y:3},{x:5,y:6},{x:6,y:10}];
+  const svm = L.loess(v, 0.5, 12);
+  const mid = svm[Math.floor(svm.length/2)].y;
+  assert.ok(mid < svm[0].y && mid < svm[svm.length-1].y);  // 중앙이 양끝보다 낮음
+});
+
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {
   // batch.php 가 돌려주는 형태를 fetchBatchChunk 가 변환한 tx 배열
   const regionAll = [

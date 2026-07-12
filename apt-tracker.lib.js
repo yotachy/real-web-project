@@ -224,6 +224,48 @@
     return { slope: slope, intercept: (sy - slope * sx) / n };
   }
 
+  // LOESS(국소 가중 선형회귀) 스무딩 — pts=[{x,y}] → steps+1개 {x,y} 곡선점.
+  //  linreg 는 전체를 직선 1개로 적합하지만, loess 는 각 지점 주변만 가중회귀해
+  //  국소 방향(굴곡)을 반영한 매끈한 추세 곡선을 만든다.
+  //  span: 국소 창에 포함할 점 비율(0.25~1). 작을수록 데이터를 더 촘촘히 따름.
+  function loess(pts, span, steps) {
+    if (!pts || pts.length < 3) return pts ? pts.slice() : [];
+    var arr = pts.slice().sort(function (a, b) { return a.x - b.x; });
+    var n = arr.length, xs = new Array(n), ys = new Array(n), i;
+    for (i = 0; i < n; i++) { xs[i] = arr[i].x; ys[i] = arr[i].y; }
+    var xmin = xs[0], xmax = xs[n - 1];
+    if (xmax === xmin) return [{ x: xmin, y: ys[0] }];
+    span = Math.max(0.25, Math.min(1, span || 0.5));
+    steps = steps || 40;
+    var k = Math.max(2, Math.min(n, Math.round(span * n)));
+    var out = [];
+    for (var s = 0; s <= steps; s++) {
+      var x0 = xmin + (xmax - xmin) * s / steps;
+      // x0 기준 k번째로 가까운 점까지 거리 = 국소 대역폭(밀도에 적응)
+      var ds = [];
+      for (i = 0; i < n; i++) ds.push(Math.abs(xs[i] - x0));
+      ds.sort(function (a, b) { return a - b; });
+      var h = ds[k - 1] || ds[n - 1] || 1;
+      if (h <= 0) h = 1e-6;
+      var sw = 0, swx = 0, swy = 0, swxx = 0, swxy = 0;
+      for (i = 0; i < n; i++) {
+        var d = Math.abs(xs[i] - x0) / h;
+        if (d >= 1) continue;
+        var tc = 1 - d * d * d, w = tc * tc * tc; // tricube 커널
+        sw += w; swx += w * xs[i]; swy += w * ys[i]; swxx += w * xs[i] * xs[i]; swxy += w * xs[i] * ys[i];
+      }
+      var yhat;
+      if (sw <= 0) { yhat = ys[0]; }
+      else {
+        var denom = sw * swxx - swx * swx;
+        if (Math.abs(denom) < 1e-9) yhat = swy / sw;
+        else { var b = (sw * swxy - swx * swy) / denom; yhat = (swy - b * swx) / sw + b * x0; }
+      }
+      out.push({ x: x0, y: yhat });
+    }
+    return out;
+  }
+
   // 평형 구간으로 필터 + 날짜 내림차순 정렬
   function bucketByPyeong(txs, pyeongKey) {
     var def = PYEONG_DEFS[pyeongKey];
@@ -257,7 +299,8 @@
     matchByName: matchByName,
     bucketByPyeong: bucketByPyeong,
     growthRate: growthRate,
-    linreg: linreg
+    linreg: linreg,
+    loess: loess
   };
 
   if (typeof module !== 'undefined' && module.exports) {
