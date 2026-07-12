@@ -104,6 +104,8 @@
   .sim-axis-btn b{color:var(--text);font-family:'IBM Plex Mono',monospace;margin-left:3px;}
   .sim-axis-btn.on{background:var(--blue);color:#fff;}
   .sim-axis-btn.on b{color:#fff;}
+  .sim-axis-pyeong{display:inline-flex;align-items:center;padding:5px 10px;border-radius:6px;background:rgba(96,165,250,.14);color:var(--blue);font-size:11px;font-weight:800;white-space:nowrap;}
+  .disc-pyeong-btn:disabled,.disc-pyeong-btn.locked{opacity:.35;cursor:not-allowed;}
   .disc-row.is-ref{border:2px solid var(--blue);background:rgba(96,165,250,.12);box-shadow:0 0 0 3px rgba(96,165,250,.18);border-radius:10px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
   .chart-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
@@ -1666,11 +1668,13 @@ function onDiscCityChange(){
 }
 function onDiscGuChange(){ discGu=document.getElementById('disc-gu').value; runDiscover(); }
 function renderDiscPyeong(){
-  document.getElementById('disc-pyeong').innerHTML=['10','20','30','40','50'].map(p=>
-    `<button class="disc-pyeong-btn${p===discPyeong?' active':''}" aria-pressed="${p===discPyeong}" onclick="setDiscPyeong('${p}')">${PYEONG_DEFS[p].label}</button>`
-  ).join('');
+  const locked = !!discSimilar;   // 비슷 모드: 기준 평형으로 고정(나머지 비활성)
+  document.getElementById('disc-pyeong').innerHTML=['10','20','30','40','50'].map(p=>{
+    const active=p===discPyeong, dis=locked && !active;
+    return `<button class="disc-pyeong-btn${active?' active':''}${dis?' locked':''}" aria-pressed="${active}"${dis?' disabled':''}${locked?` title="비슷 검색은 기준 평형(${PYEONG_DEFS[discPyeong].label})으로 고정돼요"`:''} onclick="setDiscPyeong('${p}')">${PYEONG_DEFS[p].label}</button>`;
+  }).join('');
 }
-function setDiscPyeong(p){ discPyeong=p; renderDiscPyeong(); if(discGu==='ALL') runDiscover(); else computeAndRenderDiscover(); }
+function setDiscPyeong(p){ if(discSimilar) return; discPyeong=p; renderDiscPyeong(); if(discGu==='ALL') runDiscover(); else computeAndRenderDiscover(); }
 
 // ── 비슷한 가격대 단지 (발굴 뷰에 얹는 컨텍스트) ────────────────────
 // 차트의 첫 선택 단지를 기준으로, 같은 구·평형에서 평단가 ±band% 단지를 추천.
@@ -1732,6 +1736,7 @@ function syncSimilarUI(){
     <div class="sim-axis" role="group" aria-label="매칭 기준">
       <button class="sim-axis-btn${m==='avg'?' on':''}" onclick="onSimModeChange('avg')">평단가 <b id="sim-ref-avg">${discSimilar.avg.toLocaleString()}만/평</b></button>
       <button class="sim-axis-btn${m==='total'?' on':''}" onclick="onSimModeChange('total')">총액 <b id="sim-ref-total">${formatPrice(discSimilar.total||0)}</b></button>
+      <span class="sim-axis-pyeong" title="기준 평형(고정)">${PYEONG_DEFS[discPyeong]?PYEONG_DEFS[discPyeong].label:''}</span>
     </div>
     <div class="similar-ctrl">
       <label for="disc-band">±<b id="disc-band-val">${discSimilar.band}</b>%</label>
@@ -1757,6 +1762,7 @@ function exitSimilar(){
   discSimilar=null;
   document.getElementById('disc-sort-similar').hidden=true;
   if(discSort==='similar'){ discSort='avg'; const se=document.getElementById('disc-sort'); if(se) se.value='avg'; }
+  renderDiscPyeong();   // 평형 잠금 해제
   syncSimilarUI();
   renderDiscover();
 }
