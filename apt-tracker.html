@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>실거래가 모니터</title>
 <script>/* 테마 조기 적용(깜빡임 방지) */(function(){try{if(localStorage.getItem('apt_theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -410,6 +410,39 @@
   @media(prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important;}
   }
+  /* ── 노후·터치 기기 UX (iPhone 11 등): 확대방지·세이프에어리어·탭타깃·피드백 ── */
+  /* iOS Safari: 입력 폰트 16px 미만이면 포커스 시 자동 확대 → 16px 로 방지 */
+  @media (max-width:640px){
+    input[type=text], select, .disc-select, .budget-input{ font-size:16px; }
+  }
+  /* 세이프에어리어: 노치·홈 인디케이터 영역 침범 방지 (모바일 한정, 데스크톱 여백 보존) */
+  @supports (padding:max(0px)){
+    @media (max-width:640px){
+      #dashboard-screen{
+        padding-left:max(12px, env(safe-area-inset-left));
+        padding-right:max(12px, env(safe-area-inset-right));
+        padding-bottom:max(76px, calc(env(safe-area-inset-bottom) + 44px));
+      }
+    }
+    #toast{ bottom:max(90px, calc(env(safe-area-inset-bottom) + 78px)); }
+  }
+  /* 토글 칩 체크표시 — :has 미지원(구형 Safari<15.4) 대비 .on 클래스 폴백 */
+  .region-avg-toggle.on{border-color:var(--accent);background:var(--accent-dim);color:var(--accent);}
+  .region-avg-toggle.on::before{background:var(--accent);box-shadow:0 0 7px var(--accent);}
+  /* 터치 기기(hover 없음): 탭 타깃 ≥44px + 즉각 눌림 피드백 */
+  @media (hover:none) and (pointer:coarse){
+    body{ -webkit-tap-highlight-color:transparent; }
+    .period-btn,.mode-btn,.disc-pyeong-btn,.pyeong-btn,.btn-add,.btn-sync,.btn-theme,
+    .disc-add,.btn-ghost,.btn-primary,.quick-pill,.detail-tab,.chart-tab{
+      min-height:44px; display:inline-flex; align-items:center; justify-content:center;
+    }
+    .card-icon-btn,.card-remove{ min-width:40px; min-height:40px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+    .modal-close{ padding:8px 12px; margin:-8px -12px; }
+    .period-btn:active,.mode-btn:active,.disc-pyeong-btn:active,.pyeong-btn:active,
+    .btn-add:active,.btn-sync:active,.btn-theme:active,.disc-add:active,.btn-ghost:active,
+    .btn-primary:active,.quick-pill:active,.region-avg-toggle:active,.disc-row:active,
+    .apt-select-item:active,.chart-tab:active,.detail-tab:active{ transform:scale(0.97); opacity:.9; }
+  }
 </style>
 </head>
 <body>
@@ -725,6 +758,7 @@ function regionMonthlyAvg(lawdCd, pyeong){
 }
 function onRegionAvgChange(){
   showRegionAvg=document.getElementById('region-avg-check').checked;
+  syncTogglePill('region-avg-check', showRegionAvg);
   try{ localStorage.setItem('apt_region_avg', showRegionAvg?'1':'0'); }catch(e){}
   // 캐시 진입으로 구 데이터(regionData)가 없으면 지연 로드 후 렌더
   if(showRegionAvg && selectedAptIds.length){
@@ -735,8 +769,15 @@ function onRegionAvgChange(){
 }
 function onTrendOnlyChange(){
   trendOnly=document.getElementById('trend-only-check').checked;
+  syncTogglePill('trend-only-check', trendOnly);
   try{ localStorage.setItem('apt_trend_only', trendOnly?'1':'0'); }catch(e){}
   if(selectedAptIds.length) renderChart();
+}
+// 토글 칩 .on 클래스 동기화 — 구형 Safari(:has 미지원) 대비 체크표시 폴백
+function syncTogglePill(checkId, on){
+  const el=document.getElementById(checkId);
+  const pill=el && el.closest('.region-avg-toggle');
+  if(pill) pill.classList.toggle('on', !!on);
 }
 let selectedAptIds = []; // [{aptId, pyeong}]
 let detailAptId=null, detailActivePyeong=null;
@@ -2195,7 +2236,10 @@ function renderChart() {
       <rect x="${pad.l}" y="${pad.t}" width="${cw}" height="${ch}"
         fill="transparent" id="chart-overlay"
         onmousemove="onChartMouseMove(event)"
-        onmouseleave="onChartMouseLeave()"/>
+        onmouseleave="onChartMouseLeave()"
+        ontouchstart="onChartTouch(event)"
+        ontouchmove="onChartTouch(event)"
+        ontouchend="onChartTouchEnd()"/>
     </svg>
     <div id="chart-crosshair-tip" style="position:fixed;display:none;background:var(--c-tip-bg);border:1px solid var(--border2);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--text);pointer-events:none;z-index:999;font-family:'Noto Sans KR',sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.6);min-width:160px;"></div>
     <div id="chart-tooltip" style="display:none"></div>`;
@@ -2314,6 +2358,18 @@ function onChartMouseLeave() {
   if(line) line.setAttribute('opacity','0');
   const tip = document.getElementById('chart-crosshair-tip');
   if(tip) tip.style.display = 'none';
+}
+// 터치 기기: hover 가 없어 실거래 툴팁을 못 봄 → 탭·드래그로 조회. 스크롤은 유지(preventDefault 안 함).
+var _chartHideTimer=null;
+function onChartTouch(e){
+  if(!e.touches || !e.touches.length) return;
+  clearTimeout(_chartHideTimer);
+  const t=e.touches[0];
+  onChartMouseMove({clientX:t.clientX, clientY:t.clientY});
+}
+function onChartTouchEnd(){
+  clearTimeout(_chartHideTimer);
+  _chartHideTimer=setTimeout(onChartMouseLeave, 2200);   // 잠깐 남겨 읽게 한 뒤 정리
 }
 
 function markRead(aptId) {
@@ -2451,6 +2507,7 @@ document.addEventListener('keydown', e => {
   try{ showRegionAvg=localStorage.getItem('apt_region_avg')==='1'; trendOnly=localStorage.getItem('apt_trend_only')==='1'; }catch(e){}
   const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
   const _toc=document.getElementById('trend-only-check'); if(_toc) _toc.checked=trendOnly;
+  syncTogglePill('region-avg-check', showRegionAvg); syncTogglePill('trend-only-check', trendOnly);
   if(apartments.length>0) refreshAll();
 })();
 </script>
