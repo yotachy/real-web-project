@@ -62,11 +62,20 @@
   .region-avg-toggle:focus-within{outline:2px solid var(--accent);outline-offset:2px;}
   .chart-apt-name{font-size:16px;font-weight:700;}
   .chart-apt-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+  .similar-cta{margin-top:9px;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:background .15s;white-space:nowrap;}
+  .similar-cta:hover{background:rgba(232,184,75,0.25);}
+  /* 비슷한 단지 컨텍스트 바(발굴 뷰 상단) */
+  .similar-bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:space-between;background:var(--card2);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:12px;}
+  .similar-info{font-size:13px;color:var(--text);min-width:0;line-height:1.5;}
+  .similar-badge{display:inline-block;background:var(--accent);color:#000;font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;margin-right:6px;vertical-align:middle;}
+  .similar-ctrl{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted2);white-space:nowrap;}
+  .similar-ctrl select{background:#07090f;border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:7px;font-size:12px;font-family:inherit;}
+  .disc-row.is-ref{border:1px solid var(--accent);background:var(--accent-dim);border-radius:10px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
   .chart-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
   .chart-tab.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
   .chart-body{padding:16px 20px 20px;flex:1;display:flex;flex-direction:column;}
-  .chart-svg-wrap{flex:1;min-height:420px;}
+  .chart-svg-wrap{flex:1;min-height:440px;}
   .chart-legend{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;}
   .chart-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted2);}
   .chart-legend-dot{width:8px;height:8px;border-radius:50%;}
@@ -262,7 +271,7 @@
     .chart-header{flex-direction:column;align-items:stretch;gap:10px;}
     .avg-toggles{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;}
     .chart-header,.chart-tabs,.chart-body,.tx-list-header,.tx-item{padding-left:14px;padding-right:14px;}
-    .chart-svg-wrap{min-height:340px;}
+    .chart-svg-wrap{min-height:min(60vh,460px);}
   }
   @media(max-width:480px){
     #dashboard-screen{padding:14px 10px 76px;}
@@ -442,6 +451,7 @@
           <div style="min-width:0">
             <div class="chart-apt-name" id="chart-apt-name">-</div>
             <div class="chart-apt-sub" id="chart-apt-sub">-</div>
+            <button class="similar-cta" id="similar-cta" style="display:none" onclick="openSimilar()">🔍 비슷한 가격대 단지 보기</button>
           </div>
           <div class="avg-toggles">
             <label class="region-avg-toggle" title="선택 단지가 속한 구 전체의 동일 평형 월평균 실거래가 추이">
@@ -472,11 +482,13 @@
 
   <!-- 발굴 뷰: 구·평형·정렬 선택 → 단지 랭킹 -->
   <div id="discover-view" style="display:none">
+    <div class="similar-bar" id="similar-bar" style="display:none"></div>
     <div class="discover-controls">
       <select id="disc-city" class="disc-select" aria-label="시/도" onchange="onDiscCityChange()"></select>
       <select id="disc-gu" class="disc-select" aria-label="구/군" onchange="onDiscGuChange()"></select>
       <div class="disc-pyeong" id="disc-pyeong" role="group" aria-label="평형"></div>
       <select id="disc-sort" class="disc-select" aria-label="정렬" onchange="renderDiscover()">
+        <option value="similar" id="disc-sort-similar" hidden>비슷한 가격순</option>
         <option value="growth">상승률순</option>
         <option value="count">거래량순</option>
         <option value="avg">평단가순</option>
@@ -1445,6 +1457,7 @@ function commitApt(region, exactName, dong, pyeongs, allTxs){
 let currentMode='watch';
 const DISC_DEFAULT_GU='11590';   // 동작구
 let discCity='서울특별시', discGu='', discPyeong='30', discSort='avg';  // 기본: 서울 동작구 30평대 평단가순
+let discSimilar=null;   // 비슷한 단지 모드 컨텍스트 {name,dong,avg,band} — 발굴 뷰에 얹음
 let discCache={};   // `${gu}_${period}` -> regionAll
 let discRows=[];    // 현재 구·평형의 계산 결과
 let discShown=[];   // 정렬·TOP 적용된 렌더 대상 (관심추가 인덱스 참조)
@@ -1454,6 +1467,13 @@ let discInited=false;
 function setMode(mode){
   currentMode=mode;
   const watch = mode==='watch';
+  // 탭 전환 시 비슷한 단지 컨텍스트 해제 (openSimilar 는 이 함수 호출 뒤 다시 설정)
+  if(discSimilar){
+    discSimilar=null;
+    const so=document.getElementById('disc-sort-similar'); if(so) so.hidden=true;
+    if(discSort==='similar'){ discSort='avg'; const se=document.getElementById('disc-sort'); if(se) se.value='avg'; }
+  }
+  syncSimilarUI();
   document.getElementById('watch-view').style.display = watch?'':'none';
   document.getElementById('discover-view').style.display = watch?'none':'';
   document.querySelectorAll('.mode-btn').forEach(b=>{
@@ -1496,6 +1516,56 @@ function renderDiscPyeong(){
   ).join('');
 }
 function setDiscPyeong(p){ discPyeong=p; renderDiscPyeong(); computeAndRenderDiscover(); }
+
+// ── 비슷한 가격대 단지 (발굴 뷰에 얹는 컨텍스트) ────────────────────
+// 차트의 첫 선택 단지를 기준으로, 같은 구·평형에서 평단가 ±band% 단지를 추천.
+// 필터(시/도·구/군·평형·정렬)는 발굴 뷰 그대로 재사용 — 목적만 다른 통일된 페이지.
+function openSimilar(){
+  if(!selectedAptIds.length){ toast('차트에 단지를 먼저 선택하세요'); return; }
+  const sel=selectedAptIds[0];
+  const apt=apartments.find(a=>a.id===sel.aptId);
+  if(!apt){ return; }
+  const txs=(transactions[sel.aptId]||{})[sel.pyeong]||[];
+  const refAvg=avgPyeongPrice(txs);
+  if(!refAvg){ toast('기준 단지의 평단가를 계산할 수 없어요'); return; }
+  setMode('discover');   // 발굴 뷰 진입(최초 1회 init + 기본 조회)
+  discSimilar={ name:apt.aptName, dong:apt.dong||'', avg:Math.round(refAvg), band:15 };
+  // 필터를 기준 단지에 맞춤(발굴 기본값 덮어쓰기)
+  const region=REGIONS.find(r=>r.code===apt.lawdCd);
+  if(region){ discCity=region.city; const ce=document.getElementById('disc-city'); if(ce) ce.value=discCity; updateDiscGu(discCity); }
+  discGu=apt.lawdCd; const ge=document.getElementById('disc-gu'); if(ge) ge.value=discGu;
+  discPyeong=sel.pyeong; renderDiscPyeong();
+  discSort='similar';
+  document.getElementById('disc-sort-similar').hidden=false;
+  const se=document.getElementById('disc-sort'); if(se) se.value='similar';
+  syncSimilarUI();
+  runDiscover();
+}
+function syncSimilarUI(){
+  const bar=document.getElementById('similar-bar');
+  if(!bar) return;
+  if(!discSimilar){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='';
+  bar.innerHTML=`
+    <div class="similar-info"><span class="similar-badge">기준</span><b>${escapeHtml(discSimilar.name)}</b>${discSimilar.dong?` <span class="disc-dong">${escapeHtml(discSimilar.dong)}</span>`:''} · 평단가 <b class="accent-color">${discSimilar.avg.toLocaleString()}만/평</b></div>
+    <div class="similar-ctrl">
+      <label for="disc-band">가격범위 ±</label>
+      <select id="disc-band" onchange="onBandChange()">
+        <option value="10">10%</option><option value="15">15%</option>
+        <option value="20">20%</option><option value="30">30%</option>
+      </select>
+      <button class="btn-ghost" onclick="exitSimilar()">전체 보기</button>
+    </div>`;
+  const bandEl=document.getElementById('disc-band'); if(bandEl) bandEl.value=String(discSimilar.band);
+}
+function onBandChange(){ if(discSimilar){ discSimilar.band=+document.getElementById('disc-band').value; renderDiscover(); } }
+function exitSimilar(){
+  discSimilar=null;
+  document.getElementById('disc-sort-similar').hidden=true;
+  if(discSort==='similar'){ discSort='avg'; const se=document.getElementById('disc-sort'); if(se) se.value='avg'; }
+  syncSimilarUI();
+  renderDiscover();
+}
 
 async function runDiscover(){
   if(!discGu) return;
@@ -1546,6 +1616,7 @@ function computeAndRenderDiscover(){
 
 // 한 행 렌더 (idx=discShown 내 위치, rank=표시순위)
 function discRowHtml(r, idx, rank){
+  const isRef = discSimilar && r.name===discSimilar.name && (r.dong||'')===(discSimilar.dong||'');
   const already = apartments.some(a=>a.lawdCd===discGu && a.aptName===r.name && (a.dong||'')===(r.dong||'') && a.pyeongs.includes(discPyeong));
   const g=r.growth;
   const gTxt = g==null ? '-' : `${g>=0?'+':''}${g.toFixed(1)}%`;
@@ -1566,8 +1637,8 @@ function discRowHtml(r, idx, rank){
   if(discSort!=='growth' && g!=null) meta.push(`<span class="${gCls}">${gTxt}</span>`);
   if(r.regionDiff!=null) meta.push(`<span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`);
 
-  return `<div class="disc-row">
-    <div class="disc-rank">${rank}</div>
+  return `<div class="disc-row${isRef?' is-ref':''}">
+    <div class="disc-rank">${isRef?'<span class="similar-badge">기준</span>':rank}</div>
     <div class="disc-main">
       <div class="disc-name">${escapeHtml(r.name)}${r.dong?` <span class="disc-dong">${escapeHtml(r.dong)}</span>`:''} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
       <div class="disc-meta">${meta.join(' · ')}</div>
@@ -1588,26 +1659,44 @@ function renderDiscover(){
   const regionName=region?region.name:'';
 
   let rows=discRows.slice();
+  // 비슷한 단지 모드: 기준 평단가 ±band% 로 필터 + 기준 단지는 상단 핀으로 분리
+  let refRow=null;
+  if(discSimilar){
+    refRow=discRows.find(r=>r.name===discSimilar.name && (r.dong||'')===(discSimilar.dong||''));
+    rows=rows.filter(r=>{
+      if(refRow && r===refRow) return false;
+      return Math.abs(r.avg-discSimilar.avg)/discSimilar.avg*100 <= discSimilar.band;
+    });
+  }
   if(discSort==='growth'){
     rows=rows.filter(r=>r.growth!=null);   // 추세 산출 가능(관측 3개월↑) 단지만
     rows.sort((a,b)=>b.growth-a.growth);
   } else if(discSort==='count'){
     rows.sort((a,b)=>b.count-a.count);
+  } else if(discSort==='similar' && discSimilar){
+    rows.sort((a,b)=>Math.abs(a.avg-discSimilar.avg)-Math.abs(b.avg-discSimilar.avg));   // 기준가에 가까운 순
   } else {
     rows.sort((a,b)=>b.avg-a.avg);
   }
-  discShown=rows.slice(0,30);
-  const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
-    : discSort==='count' ? '거래량순' : '평단가순';
-  noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
+  discShown=(refRow?[refRow]:[]).concat(rows.slice(0,30));
+  if(discSimilar){
+    noteEl.textContent=`${discSimilar.name} 기준 평단가 ${discSimilar.avg.toLocaleString()}만/평 ±${discSimilar.band}% · ${regionName} ${PYEONG_DEFS[discPyeong].label} · 비슷한 단지 ${rows.length}곳`;
+  } else {
+    const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
+      : discSort==='count' ? '거래량순' : '평단가순';
+    noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · 최근 ${periodLabel(currentPeriod)} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}`;
+  }
   if(!discShown.length){
-    const msg = discSort==='growth'
-      ? '이 조건에 맞는 단지가 없어요 (관측 3개월 이상 거래 필요).<br>다른 평형·구를 선택하거나 기간을 늘려보세요.'
-      : '조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).';
+    const msg = discSimilar
+      ? `±${discSimilar.band}% 범위에 비슷한 가격대 단지가 없어요.<br>위에서 가격범위를 넓히거나 다른 구/평형을 선택해보세요.`
+      : (discSort==='growth'
+        ? '이 조건에 맞는 단지가 없어요 (관측 3개월 이상 거래 필요).<br>다른 평형·구를 선택하거나 기간을 늘려보세요.'
+        : '조건에 맞는 단지가 없어요 (기간 내 거래 3건 이상 필요).');
     resultsEl.innerHTML=`<div class="tx-no">${msg}</div>`;
     return;
   }
-  resultsEl.innerHTML=discShown.map((r,i)=>discRowHtml(r, i, i+1)).join('');
+  const hasRef=!!refRow;
+  resultsEl.innerHTML=discShown.map((r,i)=>discRowHtml(r, i, hasRef?i:i+1)).join('');
 }
 
 function addFromDiscover(idx){
@@ -1724,6 +1813,7 @@ function selectCard(aptId, pyeong) {
     .map(n => `<span style="color:${nameColor[n]}">${escapeHtml(n)}</span>`)
     .join('<span style="color:var(--muted);font-weight:400"> vs </span>');
   document.getElementById('chart-apt-sub').textContent = `최근 ${periodLabel(currentPeriod)} 실거래 비교`;
+  const _cta=document.getElementById('similar-cta'); if(_cta) _cta.style.display='inline-block';
 
   // 비교 힌트
   const hint = document.getElementById('compare-hint');
@@ -1814,10 +1904,17 @@ function renderChart() {
   const yMax = globalMax + priceRange * 0.15;
   const yRange = yMax - yMin;
 
-  const W = wrap.clientWidth || 520, H = 420;
+  // 폭·높이를 실측해 영역을 꽉 채운다(레터박스 방지). 레이아웃 전이면 다음 프레임에 재시도.
+  let W = Math.round(wrap.clientWidth), H = Math.round(wrap.clientHeight);
+  if (W < 80) {
+    if (!renderChart._retry) { renderChart._retry = true; requestAnimationFrame(function(){ renderChart._retry=false; renderChart(); }); }
+    return;
+  }
+  if (H < 240) H = 340;   // 안전 최소 높이
+  const narrow = W < 480;
   const seriesCount = series.filter(s=>s.txs.length).length;
-  const topPad = 32 + Math.max(0, seriesCount) * 22; // 시리즈당 라벨 공간
-  const pad = {t:topPad, r:24, b:48, l:84};
+  const topPad = (narrow?22:32) + Math.max(0, seriesCount) * (narrow?18:22); // 시리즈당 라벨 공간
+  const pad = {t:topPad, r:narrow?14:24, b:narrow?40:48, l:narrow?56:84};
   const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
 
   function priceToY(price) {
@@ -1838,9 +1935,9 @@ function renderChart() {
   // X축: 기간에 따라 적절한 눈금 생성
   const xAxisLabels = [];
   {
-    // 눈금 간격 결정
-    // 3개월→매월, 6개월→매월, 1년→격월, 5년→6개월마다
-    const intervalMonths = currentPeriod <= 6 ? 1 : currentPeriod <= 12 ? 2 : currentPeriod <= 36 ? 3 : 6;
+    // 눈금 간격: 차트 폭에 맞춰 목표 눈금 수로 자동 산출(모바일은 적게 → 라벨 겹침 방지)
+    const targetTicks = W < 420 ? 4 : W < 700 ? 6 : 9;
+    const intervalMonths = Math.max(1, Math.ceil(currentPeriod / targetTicks));
 
     // startDate의 다음 달 1일부터 시작
     let cursor = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
@@ -1854,8 +1951,8 @@ function renderChart() {
         const x = pad.l + ratio * cw;
         const yr = cursor.getFullYear();
         const mo = cursor.getMonth() + 1;
-        // 1월이면 연도 표시, 나머지는 월만
-        const label = mo === 1 ? `${yr}년` : `${mo}월`;
+        // 연도(2자리) + 월 항상 표기 → 가로축에서 연도가 늘 보임. 연초(1월) 강조.
+        const label = `${String(yr).slice(2)}.${mo}`;
         const isBold = mo === 1;
         xAxisLabels.push(`<text x="${x.toFixed(1)}" y="${H-6}" text-anchor="middle"
           fill="${isBold ? '#718096' : '#4a5568'}" font-size="${isBold ? 10 : 10}"
