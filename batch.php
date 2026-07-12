@@ -47,6 +47,24 @@ foreach (explode(',', $ymdsRaw) as $y) {
 }
 if ($lawd === '' || !$ymds) fail(400, 'LAWD_CD/YMDS 파라미터 없음');
 
+// NAMES(선택): URL-encoded JSON [[name,dong],...]. 있으면 응답을 해당 단지 행으로만
+// 필터해 전송량을 크게 줄임(첫 진입 속도). 캐시는 원본 XML 이라 필터와 무관(오염 없음).
+// 필터는 parse 후 적용 — 매칭 규칙은 클라 sameApt 과 동일(이름 정확 일치 + dong 있으면 dong 일치).
+$nameFilter = null;
+if (isset($_GET['NAMES']) && $_GET['NAMES'] !== '') {
+    $decoded = json_decode($_GET['NAMES'], true);
+    if (is_array($decoded)) {
+        $full = []; $nameOnly = [];
+        foreach ($decoded as $pair) {
+            if (!is_array($pair) || !isset($pair[0])) continue;
+            $nm = (string)$pair[0];
+            $dg = isset($pair[1]) ? (string)$pair[1] : '';
+            if ($dg === '') $nameOnly[$nm] = true; else $full[$nm . "\0" . $dg] = true;
+        }
+        if ($full || $nameOnly) $nameFilter = ['full' => $full, 'nameOnly' => $nameOnly];
+    }
+}
+
 // 정상 API 응답인지 검증 (WAF 차단·에러 HTML 걸러냄). 성공은 <resultCode>000.
 // 거래 0건인 달도 resultCode 000 이므로 정상으로 인정(빈 결과 캐시 OK).
 function resp_ok($body) {
@@ -175,7 +193,16 @@ function parse_slim($xmlStr) {
 
 $results = [];
 foreach ($ymds as $ymd) {
-    $results[$ymd] = parse_slim(isset($rawMap[$ymd]) ? $rawMap[$ymd] : '');
+    $rows = parse_slim(isset($rawMap[$ymd]) ? $rawMap[$ymd] : '');
+    if ($nameFilter !== null) {
+        $f = [];
+        foreach ($rows as $r) {
+            if (isset($nameFilter['nameOnly'][$r['n']]) ||
+                isset($nameFilter['full'][$r['n'] . "\0" . $r['u']])) $f[] = $r;
+        }
+        $rows = $f;
+    }
+    $results[$ymd] = $rows;
 }
 
 echo json_encode($results, JSON_UNESCAPED_UNICODE);

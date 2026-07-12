@@ -129,6 +129,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.respond(400, 'application/json', json.dumps({'error':'YMDS 파라미터 없음'}).encode())
                 return
 
+            # NAMES(선택): JSON [[name,dong],...] → 응답을 해당 단지 행으로만 필터(batch.php 대응)
+            name_only, name_full = set(), set()
+            names_raw = qs.get('NAMES', [''])[0]
+            if names_raw:
+                try:
+                    for pair in json.loads(names_raw):
+                        nm = str(pair[0]); dg = str(pair[1]) if len(pair) > 1 else ''
+                        (name_only if dg == '' else name_full).add(nm if dg == '' else (nm, dg))
+                except Exception:
+                    pass
+            has_filter = bool(name_only or name_full)
+
             # 1단계: 원본 XML 병렬 수집
             raw_map = {}
             hits = 0
@@ -146,6 +158,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 for future in as_completed(pfutures):
                     ymd = pfutures[future]
                     results[ymd] = future.result()
+
+            if has_filter:
+                for ymd in results:
+                    results[ymd] = [r for r in results[ymd]
+                                    if r['n'] in name_only or (r['n'], r['u']) in name_full]
 
             total = sum(len(v) for v in results.values())
             print(f"[배치] {lawd_cd} {len(ymds)}개월 캐시:{hits}건 총:{total}건")

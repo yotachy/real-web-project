@@ -778,9 +778,10 @@ function floorBadge(floor){
 }
 
 // ── 배치 fetch: 서버에서 여러 달 병렬 처리 ─────────────────────
-async function fetchBatchChunk(lawdCd, ymds) {
-  // 단일 청크 요청
-  const url = `batch.php?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
+async function fetchBatchChunk(lawdCd, ymds, names) {
+  // 단일 청크 요청. names([[name,dong],...]) 있으면 서버가 해당 단지 행만 반환(전송량↓).
+  let url = `batch.php?LAWD_CD=${lawdCd}&YMDS=${ymds.join(',')}`;
+  if (names && names.length) url += `&NAMES=${encodeURIComponent(JSON.stringify(names))}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
   const map = await res.json();
@@ -808,10 +809,11 @@ async function fetchBatchChunk(lawdCd, ymds) {
   return result;
 }
 
-async function fetchBatch(lawdCd, ymds) {
+async function fetchBatch(lawdCd, ymds, names) {
   // batch.php 가 서버에서 curl_multi 로 모든 달을 병렬 처리하므로,
   // 큰 청크(20개월)를 한 번에 병렬로 보내 왕복 라운드를 최소화한다.
   // (예전 12개월×2병렬은 5년 조회를 3라운드로 직렬화해 느렸음)
+  // names 전달 시 서버가 해당 단지 행만 반환 → 첫 진입 전송량 대폭 절감.
   const CHUNK = 20;
   const MAX_PARALLEL = 3;   // 동시 요청 상한 (cafe24 동시 PHP·API 부하 보호)
   const chunks = [];
@@ -820,7 +822,7 @@ async function fetchBatch(lawdCd, ymds) {
   const merged = {};
   for (let i = 0; i < chunks.length; i += MAX_PARALLEL) {
     const group = chunks.slice(i, i + MAX_PARALLEL);
-    const results = await Promise.allSettled(group.map(c => fetchBatchChunk(lawdCd, c)));
+    const results = await Promise.allSettled(group.map(c => fetchBatchChunk(lawdCd, c, names)));
     for (const r of results) {
       if (r.status === 'fulfilled') Object.assign(merged, r.value);
       else console.warn('[fetchBatch] 청크 실패:', r.reason?.message);
@@ -885,13 +887,36 @@ async function refreshAll(suppressNew){
   });
 
   const ymdsAll = getLastNMonths(currentPeriod);   // 조회 시작 시점의 기간 스냅샷 (최신월 우선)
-  // ── 점진적 로딩: 최근 개월 먼저 받아 빠르게 그리고, 나머지를 웨이브로 채움 ──
-  //  첫 웨이브 최근 12개월(빠른 첫 페인트) → 이후 24개월씩. 12개월 이하는 단일 웨이브.
-  //  단, 캐시로 이미 전체를 표시 중(paintedFromCache)이면 부분 렌더로 화면이 줄어드는
-  //  깜빡임을 막기 위해 단일 웨이브로 조용히 갱신.
+
+  // ── Phase A: 필터된 최근 6개월로 초고속 첫 페인트 (콜드 진입만) ──
+  //  서버가 내 단지 행만 반환 → 전송·파싱량이 구 전체의 수십분의 1. API 라운드도 1회(≤8월).
+  //  regionAvg(지역평균 배지)는 아직 없음 → Phase B 에서 채워짐.
+  if(!paintedFromCache && ymdsAll.length>6){
+    const recent = ymdsAll.slice(0,6);
+    await Promise.all(Object.entries(regionMap).map(async ([lawdCd, apts]) => {
+      try{
+        const names = apts.map(a=>[a.aptName, a.dong||'']);
+        const br = await fetchBatch(lawdCd, recent, names);
+        if(gen !== refreshGen) return;
+        const rows = Object.values(br).flat().filter(Boolean);
+        for(const apt of apts){
+          if(!apartments.some(a=>a.id===apt.id)) continue;
+          const matched = rows.filter(tx => sameApt(tx, apt.aptName, apt.dong));
+          const result={}; for(const p of apt.pyeongs) result[p]=bucketByPyeong(matched,p);
+          transactions[apt.id]=result;
+        }
+      }catch(e){ /* Phase B 에서 재시도됨 */ }
+    }));
+    if(gen !== refreshGen) return;
+    renderGrid();   // ← 빠른 첫 페인트(내 단지 최근 실거래)
+  }
+
+  // ── Phase B: 전체 기간 unfiltered 누적 → 지역평균·구데이터·전체 이력 ──
+  //  첫 웨이브 최근 6개월(빠른 배지 포함 렌더) → 이후 24개월씩. 6개월 이하는 단일 웨이브.
+  //  캐시로 이미 전체 표시 중(paintedFromCache)이면 단일 웨이브로 조용히 갱신(깜빡임 방지).
   const waves=[];
-  if(paintedFromCache || ymdsAll.length<=12){ waves.push(ymdsAll); }
-  else { waves.push(ymdsAll.slice(0,12)); for(let i=12;i<ymdsAll.length;i+=24) waves.push(ymdsAll.slice(i,i+24)); }
+  if(paintedFromCache || ymdsAll.length<=6){ waves.push(ymdsAll); }
+  else { waves.push(ymdsAll.slice(0,6)); for(let i=6;i<ymdsAll.length;i+=24) waves.push(ymdsAll.slice(i,i+24)); }
 
   const regionAccum={};   // lawdCd -> 누적 거래(웨이브마다 확장, 월 범위가 서로 겹치지 않아 중복 없음)
   for(let w=0; w<waves.length; w++){
@@ -918,9 +943,9 @@ async function refreshAll(suppressNew){
       }
     }));
     if(gen !== refreshGen) return;
-    renderGrid();                                   // 웨이브별 렌더 — 첫 웨이브가 빠른 첫 페인트
+    renderGrid();                                   // 웨이브별 렌더(지역평균 배지 포함)
     if(selectedAptIds.length) renderChart();
-    if(w===0 && !paintedFromCache && waves.length>1) toast('최근 1년 먼저 표시 · 나머지 기간 불러오는 중…',1800);
+    if(w===0 && !paintedFromCache && waves.length>1) toast('나머지 기간·지역평균 불러오는 중…',1800);
   }
 
   if(gen !== refreshGen) return;   // 최신 조회가 아니면 마감/캐시 스킵
