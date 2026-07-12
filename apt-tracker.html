@@ -17,6 +17,8 @@
     --c-avg:#8a94a6;--c-halo:#070b14;--c-frame:#2a3550;--c-crosshair:#ffffff;--c-budget:#e8b84b;
     --c-tip-bg:#0e1320;--c-tip-sub:#94a3b8;
     --s-a:#e8b84b;--s-b:#60a5fa;--s-c:#a78bfa;--s-d:#34d399;--s-e:#fb923c;--input-bg:#07090f;--card-grad:linear-gradient(180deg,#0e1727,#0b1120);
+    /* 구 평균 전용 팔레트(관심단지 색과 구분되는 뮤트 톤) */
+    --a-a:#93a4b8;--a-b:#57c4b8;--a-c:#bda0cc;--a-d:#d1a97a;--a-e:#cf93a6;
   }
   :root[data-theme="light"]{
     --bg:#eef1f6;--card:#ffffff;--card2:#f3f5f9;--border:#dce2ec;--border2:#c4cddb;
@@ -26,6 +28,7 @@
     --c-avg:#8089a0;--c-halo:#ffffff;--c-frame:#c4cddb;--c-crosshair:#334155;--c-budget:#9a6a06;
     --c-tip-bg:#ffffff;--c-tip-sub:#5a6272;
     --s-a:#b07d0a;--s-b:#2563eb;--s-c:#7c3aed;--s-d:#059669;--s-e:#ea580c;--input-bg:#ffffff;--card-grad:linear-gradient(180deg,#ffffff,#f5f7fb);
+    --a-a:#566d88;--a-b:#2c8b82;--a-c:#7a5f94;--a-d:#8a6a3c;--a-e:#99566c;
   }
   html{background:var(--bg);}
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -199,14 +202,14 @@
   input[type=text]:focus,select:focus{border-color:var(--accent);}
   input::placeholder{color:var(--muted);}
   .form-hint{font-size:11px;color:var(--muted);margin-top:5px;}
-  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px;opacity:0;transition:opacity .2s;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:200;padding:16px;opacity:0;transition:opacity .2s;}
   .modal-backdrop.show{opacity:1;}
   .modal-box{background:var(--card);border:1px solid var(--border);border-radius:18px;width:100%;max-width:440px;padding:28px;animation:fadeUp .25s ease;}
   .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
   .modal-title{font-size:18px;font-weight:700;}
   .modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;transition:color .15s;}
   .modal-close:hover{color:var(--text);}
-  .sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;transition:opacity .2s;padding:16px;}
+  .sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;z-index:200;opacity:0;transition:opacity .2s;padding:16px;}
   .sheet-backdrop.show{opacity:1;}
   .sheet-box{background:var(--card);border:1px solid var(--border);border-radius:18px;width:100%;max-width:720px;max-height:88vh;display:flex;flex-direction:column;transform:translateY(20px);transition:transform .25s ease;}
   .sheet-backdrop.show .sheet-box{transform:translateY(0);}
@@ -828,7 +831,8 @@ function chartTheme(){
     avg:g('--c-avg'), halo:g('--c-halo'), frame:g('--c-frame'), crosshair:g('--c-crosshair'),
     budget:g('--c-budget'), tipBg:g('--c-tip-bg'), tipSub:g('--c-tip-sub'), text:g('--text'),
     up:g('--up'), down:g('--down'), card:g('--card'),
-    s:[g('--s-a'),g('--s-b'),g('--s-c'),g('--s-d'),g('--s-e')] };
+    s:[g('--s-a'),g('--s-b'),g('--s-c'),g('--s-d'),g('--s-e')],
+    a:[g('--a-a'),g('--a-b'),g('--a-c'),g('--a-d'),g('--a-e')] };
 }
 // 층 배지(색상 포함). 저/중/고 없으면 ''.
 function floorBadge(floor){
@@ -1907,8 +1911,8 @@ function renderChart() {
 
   // 구 평균 추이 시리즈 (선택 단지의 구+평형별 월평균) — 회색 벤치마크 + 지역명 라벨
   if (showRegionAvg) {
-    const seen = new Set();
-    selectedAptIds.forEach((sel, i) => {
+    const seen = new Set(); let avgIdx = 0;
+    selectedAptIds.forEach((sel) => {
       const apt = apartments.find(a => a.id === sel.aptId);
       if (!apt) return;
       const key = apt.lawdCd + '_' + sel.pyeong;
@@ -1916,7 +1920,8 @@ function renderChart() {
       const avgTxs = regionMonthlyAvg(apt.lawdCd, sel.pyeong);
       if (avgTxs.length >= 2) {
         const gu = (apt.regionName || '').split(' ').pop();
-        const guColor = PAL[i % PAL.length].line;   // 구별 색상(해당 구 관심단지 색과 동일)
+        const guColor = T.a[avgIdx % T.a.length];   // 구 평균 전용 팔레트(구별 색상)
+        avgIdx++;
         series.push({
           id: 'avg_' + key, apt: null, pyeong: sel.pyeong, txs: avgTxs, isAvg: true,
           color: { line: guColor, area: 'transparent' }, dashed: false,
