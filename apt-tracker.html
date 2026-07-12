@@ -1887,25 +1887,39 @@ function renderDiscover(progress){
       return Math.abs(candVal(r)-rv)/rv*100 <= discSimilar.band;
     });
   }
-  if(discSort==='growth'){
-    rows=rows.filter(r=>r.growth!=null);   // 추세 산출 가능(관측 3개월↑) 단지만
-    rows.sort((a,b)=>b.growth-a.growth);
-  } else if(discSort==='count'){
-    rows.sort((a,b)=>b.count-a.count);
-  } else if(discSort==='total'){
-    rows.sort((a,b)=>(b.total||0)-(a.total||0));
-  } else if(discSort==='similar' && discSimilar){
+  // 안전망: 밴드에 후보가 하나도 없으면(기준만 남음) 근접순으로 자동 표시 → 빈 화면 방지
+  let relaxed=false;
+  if(discSimilar && rows.length===0 && !progress){
     const rv = simMode==='total' ? discSimilar.total : discSimilar.avg;
-    rows.sort((a,b)=>Math.abs(candVal(a)-rv)-Math.abs(candVal(b)-rv));   // 기준에 가까운 순
-  } else {
-    rows.sort((a,b)=>b.avg-a.avg);
+    const pool=discRows.filter(r=>!(refRow && r===refRow) && candVal(r)>0);
+    if(pool.length && rv){
+      pool.sort((a,b)=>Math.abs(candVal(a)-rv)-Math.abs(candVal(b)-rv));
+      rows=pool.slice(0,20); relaxed=true;
+    }
+  }
+  if(!relaxed){
+    if(discSort==='growth'){
+      rows=rows.filter(r=>r.growth!=null);   // 추세 산출 가능(관측 3개월↑) 단지만
+      rows.sort((a,b)=>b.growth-a.growth);
+    } else if(discSort==='count'){
+      rows.sort((a,b)=>b.count-a.count);
+    } else if(discSort==='total'){
+      rows.sort((a,b)=>(b.total||0)-(a.total||0));
+    } else if(discSort==='similar' && discSimilar){
+      const rv = simMode==='total' ? discSimilar.total : discSimilar.avg;
+      rows.sort((a,b)=>Math.abs(candVal(a)-rv)-Math.abs(candVal(b)-rv));   // 기준에 가까운 순
+    } else {
+      rows.sort((a,b)=>b.avg-a.avg);
+    }
   }
   discShown=(refRow?[refRow]:[]).concat(rows.slice(0,40));
   const prog = progress ? ` · ${progress}` : '';
   if(discSimilar){
     const axis = simMode==='total' ? `총액 ${formatPrice(discSimilar.total||0)}` : `평단가 ${discSimilar.avg.toLocaleString()}만/평`;
     const sortTxt = discSort==='growth' ? '· 상승률순' : discSort==='avg' ? '· 평단가순' : discSort==='total' ? '· 총액순' : discSort==='similar' ? '· 근접순' : '';
-    noteEl.textContent=`${discSimilar.name} 기준 ${axis} ±${discSimilar.band}% · ${regionName} ${PYEONG_DEFS[discPyeong].label} · 비슷한 단지 ${rows.length}곳 ${sortTxt}${prog}`;
+    noteEl.textContent = relaxed
+      ? `${discSimilar.name} 기준 ${axis} · ±${discSimilar.band}% 범위엔 없어 근접순 ${rows.length}곳 표시 · ${regionName} ${PYEONG_DEFS[discPyeong].label}${prog}`
+      : `${discSimilar.name} 기준 ${axis} ±${discSimilar.band}% · ${regionName} ${PYEONG_DEFS[discPyeong].label} · 비슷한 단지 ${rows.length}곳 ${sortTxt}${prog}`;
   } else {
     const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
       : discSort==='count' ? '거래량순' : '평단가순';
