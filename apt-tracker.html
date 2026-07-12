@@ -1569,22 +1569,22 @@ async function fetchAgg(lawd, ymds, pmin, pmax){
   const j=await r.json();
   return (j && j.rows) ? j.rows : [];
 }
-// 전체 구를 순차 배치로 집계 → 도착하는 대로 점진적 리스트업
+// 전체 구를 연속 워커 풀로 집계 → 도착하는 대로 점진적 리스트업(배치 대기 없음 → 빠름)
+const ALL_MONTHS = 6;   // 전체 검색은 최근 6개월 평단가로 제한(속도·upstream 부하)
 async function runDiscoverAll(){
   const gen=++discGen;
   const resultsEl=document.getElementById('discover-results');
   const regions=REGIONS.filter(r=>r.city===discCity);
   const def=PYEONG_DEFS[discPyeong];
-  const monthsN=Math.min(currentPeriod, 12);   // 전체는 최근 1년 평단가로 제한(비용·속도)
-  const ymds=getLastNMonths(monthsN);
-  const ymdsKey=monthsN+'m_'+ymds[0];
-  discRows=[]; const merged={}; let done=0;
+  const ymds=getLastNMonths(Math.min(currentPeriod, ALL_MONTHS));
+  const ymdsKey=ALL_MONTHS+'m_'+ymds[0];
+  discRows=[]; const merged={}; let done=0, next=0;
   resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> ${escapeHtml(discCity)} 전체 평단가 수집중… 0/${regions.length}구</div>`;
-  const CONC=5;
-  for(let i=0;i<regions.length;i+=CONC){
-    if(gen!==discGen) return;
-    const batch=regions.slice(i,i+CONC);
-    await Promise.all(batch.map(async reg=>{
+  const POOL=8;   // 동시 집계 구 수. 각 구=6개월 단일 웨이브 → 최대 동시 upstream ~48 (WAF 임계 60 미만)
+  async function worker(){
+    while(next < regions.length){
+      if(gen!==discGen) return;
+      const reg=regions[next++];
       const ck=`${reg.code}_${ymdsKey}_${discPyeong}`;
       let rows=aggCache[ck];
       if(!rows){ try{ rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); aggCache[ck]=rows; }catch(e){ rows=[]; } }
@@ -1592,12 +1592,14 @@ async function runDiscoverAll(){
       rows.forEach(a=>{ merged[reg.code+' '+a.n+' '+(a.u||'')]={
         name:a.n, dong:a.u||'', avg:a.avg, count:a.cnt, latest:a.lp, latestY:a.ly, latestM:a.lm,
         growth:null, regionDiff:null, isHigh:false, lawd:reg.code }; });
-    }));
-    if(gen!==discGen) return;
-    done+=batch.length;
-    discRows=Object.values(merged);
-    renderDiscover(done<regions.length ? `${done}/${regions.length}구 수집중…` : null);
+      done++;
+      discRows=Object.values(merged);
+      renderDiscover(done<regions.length ? `${done}/${regions.length}구 수집중…` : null);
+    }
   }
+  const n=Math.min(POOL, regions.length), workers=[];
+  for(let w=0; w<n; w++) workers.push(worker());
+  await Promise.all(workers);
 }
 let discRows=[];    // 현재 구·평형의 계산 결과
 let discShown=[];   // 정렬·TOP 적용된 렌더 대상 (관심추가 인덱스 참조)
@@ -1672,9 +1674,9 @@ function enterSimilar(ref){
   discGu='ALL';                                          // 구/군 전체가 기본
   const ge=document.getElementById('disc-gu'); if(ge) ge.value='ALL';
   if(ref.pyeong){ discPyeong=ref.pyeong; renderDiscPyeong(); }
-  discSort='similar';
+  discSort='avg';   // 비슷 검색 기본 정렬 = 평단가순 ('비슷한 가격순' 은 선택지로 유지)
   const so=document.getElementById('disc-sort-similar'); if(so) so.hidden=false;
-  const se=document.getElementById('disc-sort'); if(se) se.value='similar';
+  const se=document.getElementById('disc-sort'); if(se) se.value='avg';
   syncSimilarUI();
   runDiscover();
 }
@@ -1856,7 +1858,7 @@ function renderDiscover(progress){
   } else {
     const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
       : discSort==='count' ? '거래량순' : '평단가순';
-    const per = discGu==='ALL' ? '최근 1년' : `최근 ${periodLabel(currentPeriod)}`;
+    const per = discGu==='ALL' ? `최근 ${ALL_MONTHS}개월` : `최근 ${periodLabel(currentPeriod)}`;
     noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · ${per} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}${prog}`;
   }
   if(!discShown.length){
