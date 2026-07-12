@@ -1908,7 +1908,7 @@ function renderChart() {
   // 구 평균 추이 시리즈 (선택 단지의 구+평형별 월평균) — 회색 벤치마크 + 지역명 라벨
   if (showRegionAvg) {
     const seen = new Set();
-    selectedAptIds.forEach(sel => {
+    selectedAptIds.forEach((sel, i) => {
       const apt = apartments.find(a => a.id === sel.aptId);
       if (!apt) return;
       const key = apt.lawdCd + '_' + sel.pyeong;
@@ -1916,9 +1916,10 @@ function renderChart() {
       const avgTxs = regionMonthlyAvg(apt.lawdCd, sel.pyeong);
       if (avgTxs.length >= 2) {
         const gu = (apt.regionName || '').split(' ').pop();
+        const guColor = PAL[i % PAL.length].line;   // 구별 색상(해당 구 관심단지 색과 동일)
         series.push({
           id: 'avg_' + key, apt: null, pyeong: sel.pyeong, txs: avgTxs, isAvg: true,
-          color: { line: T.avg, area: 'rgba(138,148,166,0.10)' }, dashed: false,
+          color: { line: guColor, area: 'transparent' }, dashed: false,
           label: `${gu} ${PYEONG_DEFS[sel.pyeong]?.label || ''} 평균`,
           endLabel: `${gu} 평균`
         });
@@ -2045,8 +2046,14 @@ function renderChart() {
       ? `${linePath} L${pts[pts.length-1].x.toFixed(1)},${(pad.t+ch).toFixed(1)} L${pts[0].x.toFixed(1)},${(pad.t+ch).toFixed(1)} Z`
       : '';
 
-    if (areaPath && s.color.area !== 'transparent') paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
-    paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="${s.isAvg ? '2.4' : '1.6'}"${s.isAvg ? ' opacity="0.85"' : ''} stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
+    if (s.isAvg) {
+      // 구 평균: 라인방식과 구별되는 '영역' 스타일 — 굵은 반투명 밴드 + 얇은 점선 중심선(구별 색상)
+      paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="${narrow?8:11}" opacity="0.18" stroke-linejoin="round" stroke-linecap="round"/>`);
+      paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="1.6" opacity="0.9" stroke-dasharray="1,5" stroke-linecap="round"/>`);
+    } else {
+      if (areaPath && s.color.area !== 'transparent') paths.push(`<path d="${areaPath}" fill="url(#${gradId})"/>`);
+      paths.push(`<path d="${linePath}" fill="none" stroke="${c.line}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"${s.dashed ? ' stroke-dasharray="6,4"' : ''}/>`);
+    }
 
     // 평균선 지역명 라벨(선 오른쪽 끝)
     if (s.isAvg && pts.length) {
@@ -2193,7 +2200,7 @@ function renderChart() {
     .filter(s => s.apt || s.isAvg)
     .map(s => `
       <div class="chart-legend-item">
-        <span class="chart-legend-dot" style="background:${s.color.line};${s.dashed ? 'outline:2px dashed '+s.color.line+';background:transparent;outline-offset:-2px' : ''}"></span>
+        <span class="chart-legend-dot" style="${s.isAvg ? `width:20px;height:7px;border-radius:4px;background:${s.color.line};opacity:0.5` : `background:${s.color.line};${s.dashed ? 'outline:2px dashed '+s.color.line+';background:transparent;outline-offset:-2px' : ''}`}"></span>
         <span style="${s.isAvg ? 'opacity:0.85;font-style:italic' : ''}">${s.label}</span>
         ${s.trend ? `<span class="trend-tag ${s.trend.cls}">${s.trend.label} ${s.trend.pct>=0?'+':''}${s.trend.pct.toFixed(0)}%</span>` : ''}
         ${!s.txs.length ? '<span style="font-size:10px;color:var(--muted);font-weight:400">(거래없음)</span>' : ''}
