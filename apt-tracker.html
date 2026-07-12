@@ -1688,9 +1688,9 @@ function enterSimilar(ref){
   discGu='ALL';                                          // 구/군 전체가 기본
   const ge=document.getElementById('disc-gu'); if(ge) ge.value='ALL';
   if(ref.pyeong){ discPyeong=ref.pyeong; renderDiscPyeong(); }
-  discSort='growth';   // 비슷 검색 기본 정렬 = 추세(상승률)순 → 같은 값이라도 더 오르는 단지 위로
+  discSort='avg';   // 기본 평단가순. 상승률순은 관측 3개월↑만 남아 밴드와 겹치면 0건 → 선택지로만
   const so=document.getElementById('disc-sort-similar'); if(so) so.hidden=false;
-  const se=document.getElementById('disc-sort'); if(se) se.value='growth';
+  const se=document.getElementById('disc-sort'); if(se) se.value='avg';
   syncSimilarUI();
   runDiscover();
 }
@@ -1700,10 +1700,17 @@ function openSimilar(){
   const sel=selectedAptIds[0];
   const apt=apartments.find(a=>a.id===sel.aptId);
   if(!apt){ return; }
-  const txs=(transactions[sel.aptId]||{})[sel.pyeong]||[];
-  const refAvg=avgPyeongPrice(txs);
+  const txsAll=(transactions[sel.aptId]||{})[sel.pyeong]||[];
+  if(!txsAll.length){ toast('기준 단지의 거래가 없어요'); return; }
+  // 후보(agg 최근 6개월)와 동일 기준으로 산출 → 총액이 옛 저가에 눌려 낮게 나오는 문제 방지
+  const now=new Date();
+  const cut=new Date(now.getFullYear(), now.getMonth()-(ALL_MONTHS-1), 1);
+  const cutYm=''+cut.getFullYear()+String(cut.getMonth()+1).padStart(2,'0');
+  let use=txsAll.filter(t=>(''+t.year+String(t.month).padStart(2,'0'))>=cutYm);
+  if(!use.length) use=txsAll.slice(0,5);   // 최근 거래가 없으면 최근 5건
+  const refAvg=avgPyeongPrice(use);
   if(!refAvg){ toast('기준 단지의 평단가를 계산할 수 없어요'); return; }
-  const refTotal = txs.length ? Math.round(txs.reduce((s,t)=>s+t.price,0)/txs.length) : 0;   // 평균 총액
+  const refTotal=Math.round(use.reduce((s,t)=>s+t.price,0)/use.length);   // 최근 평균 총액
   enterSimilar({ name:apt.aptName, dong:apt.dong||'', lawd:apt.lawdCd, pyeong:sel.pyeong, avg:refAvg, total:refTotal });
 }
 // 리스트 행 체크박스(매번 1개만) → 그 단지를 기준으로. 기준행 재클릭 시 해제.
