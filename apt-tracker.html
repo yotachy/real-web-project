@@ -1574,12 +1574,14 @@ const ALL_MONTHS = 6;   // 전체 검색은 최근 6개월 평단가로 제한(�
 async function runDiscoverAll(){
   const gen=++discGen;
   const resultsEl=document.getElementById('discover-results');
-  const regions=REGIONS.filter(r=>r.city===discCity);
+  // 전체면 시/도 전체 구, 특정 구면 그 구 하나만 집계(비슷 모드에서 구를 좁힌 경우)
+  const regions = discGu==='ALL' ? REGIONS.filter(r=>r.city===discCity) : REGIONS.filter(r=>r.code===discGu);
   const def=PYEONG_DEFS[discPyeong];
   const ymds=getLastNMonths(Math.min(currentPeriod, ALL_MONTHS));
   const ymdsKey=ALL_MONTHS+'m_'+ymds[0];
   discRows=[]; const merged={}; let done=0, next=0;
-  resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> ${escapeHtml(discCity)} 전체 평단가 수집중… 0/${regions.length}구</div>`;
+  const scopeLabel = discGu==='ALL' ? `${discCity} 전체` : ((REGIONS.find(r=>r.code===discGu)||{}).name||'');
+  resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> ${escapeHtml(scopeLabel)} 평단가 수집중… 0/${regions.length}구</div>`;
   const POOL=8;   // 동시 집계 구 수. 각 구=6개월 단일 웨이브 → 최대 동시 upstream ~48 (WAF 임계 60 미만)
   async function worker(){
     while(next < regions.length){
@@ -1650,7 +1652,12 @@ function updateDiscGu(city){
   discGu=(filtered[0]||{}).code||'';   // 기본은 첫 구(호출측이 전체로 덮어쓸 수 있음)
   guEl.value=discGu;
 }
-function onDiscCityChange(){ discCity=document.getElementById('disc-city').value; updateDiscGu(discCity); runDiscover(); }
+function onDiscCityChange(){
+  discCity=document.getElementById('disc-city').value;
+  updateDiscGu(discCity);
+  if(discSimilar){ discGu='ALL'; const ge=document.getElementById('disc-gu'); if(ge) ge.value='ALL'; }  // 비슷 모드는 시/도 바꿔도 전체 유지
+  runDiscover();
+}
 function onDiscGuChange(){ discGu=document.getElementById('disc-gu').value; runDiscover(); }
 function renderDiscPyeong(){
   document.getElementById('disc-pyeong').innerHTML=['10','20','30','40','50'].map(p=>
@@ -1727,7 +1734,9 @@ function exitSimilar(){
 }
 
 async function runDiscover(){
-  if(discGu==='ALL'){ return runDiscoverAll(); }
+  // 비슷 모드는 평단가만 필요 → 항상 agg(6개월, 빠름). 전체든 특정 구든.
+  // 일반 발굴 전체(ALL)도 agg. 일반 발굴의 특정 구만 원시조회(상승률 랭킹 위해 전 기간).
+  if(discSimilar || discGu==='ALL'){ return runDiscoverAll(); }
   if(!discGu) return;
   const resultsEl=document.getElementById('discover-results');
   const gen=++discGen;
