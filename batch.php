@@ -1,13 +1,11 @@
 <?php
 /**
- * 실거래가 배치 프록시 — server.py /batch 엔드포인트의 PHP 이식.
- * cafe24 정적 호스팅(Python 미지원)에서 apt-tracker.html 이 사용.
+ * 실거래가 배치 프록시 — server.py /batch 의 PHP 이식.
+ * 요청:  batch.php?LAWD_CD=11680&YMDS=202401,...[&NAMES=[[name,dong],...]]
+ * 응답:  { "202401":[{n,u,a,f,p,y,m,d},...], ... }   (해제·무효 제거, slim 필드)
  *
- * 요청:  batch.php?LAWD_CD=11680&YMDS=202401,202402,...
- * 응답:  { "202401": [ {n,a,f,p,y,m,d}, ... ], ... }   (해제·무효 건 제거, slim 필드)
- *
- * - curl_multi 로 여러 달 병렬 수집 (server.py ThreadPoolExecutor 대응)
- * - 파일 캐시 TTL 30분 (쓰기 불가 환경이면 캐시 없이 동작)
+ * 함수(resp_ok/캐시/collect_raw/parse_slim)는 agg.php 가 require 해서 재사용한다.
+ * 아래 '요청 처리'는 batch.php 를 직접 호출할 때만 실행(include 시 스킵).
  */
 
 const CACHE_TTL = 1800; // 30분
@@ -22,8 +20,7 @@ function fail($code, $msg) {
     exit;
 }
 
-// data.go.kr RTMSDataSvcAptTradeDev serviceKey — 소스에 하드코딩 금지.
-// 우선순위: 환경변수 DATA_GO_KR_KEY → config.local.php(git 제외) 의 반환값.
+// data.go.kr serviceKey — 소스 하드코딩 금지. 환경변수 → config.local.php 순.
 function load_api_key() {
     $k = getenv('DATA_GO_KR_KEY');
     if ($k) return trim($k);
@@ -37,48 +34,20 @@ function load_api_key() {
 $API_KEY = load_api_key();
 if ($API_KEY === '') fail(500, 'API 키 미설정 — DATA_GO_KR_KEY 환경변수 또는 config.local.php 필요');
 
-$lawd = isset($_GET['LAWD_CD']) ? preg_replace('/\D/', '', $_GET['LAWD_CD']) : '';
-$ymdsRaw = isset($_GET['YMDS']) ? $_GET['YMDS'] : '';
+$cacheDir = sys_get_temp_dir() . '/apt-tracker-cache';
 
-$ymds = [];
-foreach (explode(',', $ymdsRaw) as $y) {
-    $y = trim($y);
-    if (strlen($y) === 6 && ctype_digit($y)) $ymds[] = $y;
-}
-if ($lawd === '' || !$ymds) fail(400, 'LAWD_CD/YMDS 파라미터 없음');
-
-// NAMES(선택): URL-encoded JSON [[name,dong],...]. 있으면 응답을 해당 단지 행으로만
-// 필터해 전송량을 크게 줄임(첫 진입 속도). 캐시는 원본 XML 이라 필터와 무관(오염 없음).
-// 필터는 parse 후 적용 — 매칭 규칙은 클라 sameApt 과 동일(이름 정확 일치 + dong 있으면 dong 일치).
-$nameFilter = null;
-if (isset($_GET['NAMES']) && $_GET['NAMES'] !== '') {
-    $decoded = json_decode($_GET['NAMES'], true);
-    if (is_array($decoded)) {
-        $full = []; $nameOnly = [];
-        foreach ($decoded as $pair) {
-            if (!is_array($pair) || !isset($pair[0])) continue;
-            $nm = (string)$pair[0];
-            $dg = isset($pair[1]) ? (string)$pair[1] : '';
-            if ($dg === '') $nameOnly[$nm] = true; else $full[$nm . "\0" . $dg] = true;
-        }
-        if ($full || $nameOnly) $nameFilter = ['full' => $full, 'nameOnly' => $nameOnly];
-    }
-}
-
-// 정상 API 응답인지 검증 (WAF 차단·에러 HTML 걸러냄). 성공은 <resultCode>000.
-// 거래 0건인 달도 resultCode 000 이므로 정상으로 인정(빈 결과 캐시 OK).
+// 정상 API 응답 검증(WAF 차단·에러 HTML 걸러냄). 성공은 <resultCode>000. 0건도 정상.
 function resp_ok($body) {
     return is_string($body) && strpos($body, '<resultCode>000') !== false;
 }
 
-// ── 캐시 유틸 (쓰기 불가 시 조용히 무시. 오염(비정상)분은 무시하고 재조회) ──
-$cacheDir = sys_get_temp_dir() . '/apt-tracker-cache';
+// ── 캐시 유틸 (쓰기 불가 시 조용히 무시. 오염분은 무시하고 재조회) ──
 function cache_path($dir, $lawd, $ymd) { return $dir . '/' . $lawd . '_' . $ymd . '.xml'; }
 function cache_get($dir, $lawd, $ymd) {
     $p = cache_path($dir, $lawd, $ymd);
     if (is_file($p) && (time() - filemtime($p)) < CACHE_TTL) {
         $d = @file_get_contents($p);
-        if ($d !== false && resp_ok($d)) return $d;   // 정상 응답만 캐시로 인정
+        if ($d !== false && resp_ok($d)) return $d;
     }
     return null;
 }
@@ -87,8 +56,7 @@ function cache_set($dir, $lawd, $ymd, $data) {
     @file_put_contents(cache_path($dir, $lawd, $ymd), $data);
 }
 
-// 여러 달을 curl_multi 로 수집하되 동시 요청을 웨이브(8)로 제한(WAF 차단 회피).
-// 정상(resp_ok)인 응답만 [ymd=>body] 로 반환.
+// 여러 달을 curl_multi 로 수집(웨이브 8 로 동시성 제한 → WAF 회피). 정상만 반환.
 function fetch_months($lawd, $ymds, $apiKey) {
     $out = [];
     $waveSize = 8;
@@ -119,39 +87,39 @@ function fetch_months($lawd, $ymds, $apiKey) {
             $body = curl_multi_getcontent($c);
             curl_multi_remove_handle($mh, $c);
             curl_close($c);
-            if (resp_ok($body)) $out[$ymd] = $body;   // 정상만 채택(에러는 버림)
+            if (resp_ok($body)) $out[$ymd] = $body;
         }
         curl_multi_close($mh);
     }
     return $out;
 }
 
-// ── 1단계: 캐시 히트 분리 + 미스분 수집(웨이브 + 실패 재시도) ──────
-$rawMap = [];
-$toFetch = [];
-foreach ($ymds as $ymd) {
-    $c = cache_get($cacheDir, $lawd, $ymd);
-    if ($c !== null) $rawMap[$ymd] = $c;
-    else $toFetch[] = $ymd;
+// 캐시 히트 분리 + 미스분 수집(웨이브 + 실패 1회 재시도) → [ymd => rawXml]  (batch/agg 공용)
+function collect_raw($cacheDir, $lawd, $ymds, $apiKey) {
+    $rawMap = [];
+    $toFetch = [];
+    foreach ($ymds as $ymd) {
+        $c = cache_get($cacheDir, $lawd, $ymd);
+        if ($c !== null) $rawMap[$ymd] = $c;
+        else $toFetch[] = $ymd;
+    }
+    if ($toFetch) {
+        $got = fetch_months($lawd, $toFetch, $apiKey);
+        $failed = array_values(array_diff($toFetch, array_keys($got)));
+        if ($failed) {
+            usleep(400000);
+            foreach (fetch_months($lawd, $failed, $apiKey) as $ymd => $b) $got[$ymd] = $b;
+        }
+        foreach ($got as $ymd => $body) {
+            $rawMap[$ymd] = $body;
+            cache_set($cacheDir, $lawd, $ymd, $body);
+        }
+        foreach ($toFetch as $ymd) { if (!isset($rawMap[$ymd])) $rawMap[$ymd] = ''; }
+    }
+    return $rawMap;
 }
 
-if ($toFetch) {
-    $got = fetch_months($lawd, $toFetch, $API_KEY);
-    // 실패(차단 등)한 달 1회 재시도
-    $failed = array_values(array_diff($toFetch, array_keys($got)));
-    if ($failed) {
-        usleep(400000); // 0.4s
-        foreach (fetch_months($lawd, $failed, $API_KEY) as $ymd => $b) $got[$ymd] = $b;
-    }
-    foreach ($got as $ymd => $body) {
-        $rawMap[$ymd] = $body;
-        cache_set($cacheDir, $lawd, $ymd, $body);   // 정상만 캐시
-    }
-    // 끝내 실패한 달은 빈 결과(오염 캐시 남기지 않음)
-    foreach ($toFetch as $ymd) { if (!isset($rawMap[$ymd])) $rawMap[$ymd] = ''; }
-}
-
-// ── 2단계: XML slim 파싱 (parse_slim 대응) ───────────────────────
+// XML → slim 필드. 해제/무효/0원/빈이름/빈연도 제거.
 function parse_slim($xmlStr) {
     if (!$xmlStr) return [];
     $prev = libxml_use_internal_errors(true);
@@ -162,24 +130,19 @@ function parse_slim($xmlStr) {
     $items = [];
     foreach ($root->xpath('//item') as $it) {
         $get = function ($t) use ($it) { return trim((string)$it->$t); };
-
         if ($get('cdealType') === '해제') continue;
-
         $priceRaw = str_replace([',', ' ', "\t", "\n"], '', $get('dealAmount'));
         $chk = ltrim($priceRaw, '-');
         if ($priceRaw === '' || $chk === '' || !ctype_digit($chk)) continue;
         $price = (int)$priceRaw;
         if ($price <= 0) continue;
-
         $aptNm = $get('aptNm');
         if ($aptNm === '') continue;
-
         $yr = $get('dealYear');
         if ($yr === '' || !ctype_digit($yr)) continue;
-
         $items[] = [
             'n' => $aptNm,
-            'u' => $get('umdNm'),   // 법정동 (동명 아파트 구분용)
+            'u' => $get('umdNm'),
             'a' => $get('excluUseAr'),
             'f' => $get('floor'),
             'p' => $price,
@@ -191,18 +154,46 @@ function parse_slim($xmlStr) {
     return $items;
 }
 
-$results = [];
-foreach ($ymds as $ymd) {
-    $rows = parse_slim(isset($rawMap[$ymd]) ? $rawMap[$ymd] : '');
-    if ($nameFilter !== null) {
-        $f = [];
-        foreach ($rows as $r) {
-            if (isset($nameFilter['nameOnly'][$r['n']]) ||
-                isset($nameFilter['full'][$r['n'] . "\0" . $r['u']])) $f[] = $r;
-        }
-        $rows = $f;
+// ── 요청 처리 (batch.php 직접 접근 시만; agg.php 가 require 하면 스킵) ──
+if (realpath(__FILE__) === realpath(isset($_SERVER['SCRIPT_FILENAME']) ? $_SERVER['SCRIPT_FILENAME'] : '')) {
+    $lawd = isset($_GET['LAWD_CD']) ? preg_replace('/\D/', '', $_GET['LAWD_CD']) : '';
+    $ymdsRaw = isset($_GET['YMDS']) ? $_GET['YMDS'] : '';
+    $ymds = [];
+    foreach (explode(',', $ymdsRaw) as $y) {
+        $y = trim($y);
+        if (strlen($y) === 6 && ctype_digit($y)) $ymds[] = $y;
     }
-    $results[$ymd] = $rows;
-}
+    if ($lawd === '' || !$ymds) fail(400, 'LAWD_CD/YMDS 파라미터 없음');
 
-echo json_encode($results, JSON_UNESCAPED_UNICODE);
+    // NAMES(선택): [[name,dong],...] → 응답을 해당 단지 행으로만 필터(전송량↓).
+    $nameFilter = null;
+    if (isset($_GET['NAMES']) && $_GET['NAMES'] !== '') {
+        $decoded = json_decode($_GET['NAMES'], true);
+        if (is_array($decoded)) {
+            $full = []; $nameOnly = [];
+            foreach ($decoded as $pair) {
+                if (!is_array($pair) || !isset($pair[0])) continue;
+                $nm = (string)$pair[0];
+                $dg = isset($pair[1]) ? (string)$pair[1] : '';
+                if ($dg === '') $nameOnly[$nm] = true; else $full[$nm . "\0" . $dg] = true;
+            }
+            if ($full || $nameOnly) $nameFilter = ['full' => $full, 'nameOnly' => $nameOnly];
+        }
+    }
+
+    $rawMap = collect_raw($cacheDir, $lawd, $ymds, $API_KEY);
+    $results = [];
+    foreach ($ymds as $ymd) {
+        $rows = parse_slim(isset($rawMap[$ymd]) ? $rawMap[$ymd] : '');
+        if ($nameFilter !== null) {
+            $f = [];
+            foreach ($rows as $r) {
+                if (isset($nameFilter['nameOnly'][$r['n']]) ||
+                    isset($nameFilter['full'][$r['n'] . "\0" . $r['u']])) $f[] = $r;
+            }
+            $rows = $f;
+        }
+        $results[$ymd] = $rows;
+    }
+    echo json_encode($results, JSON_UNESCAPED_UNICODE);
+}
