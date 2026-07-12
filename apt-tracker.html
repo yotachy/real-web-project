@@ -688,6 +688,11 @@ function regionMonthlyAvg(lawdCd, pyeong){
 function onRegionAvgChange(){
   showRegionAvg=document.getElementById('region-avg-check').checked;
   try{ localStorage.setItem('apt_region_avg', showRegionAvg?'1':'0'); }catch(e){}
+  // 캐시 진입으로 구 데이터(regionData)가 없으면 지연 로드 후 렌더
+  if(showRegionAvg && selectedAptIds.length){
+    const need=selectedAptIds.some(s=>{ const a=apartments.find(x=>x.id===s.aptId); return a && !regionData[a.lawdCd]; });
+    if(need){ ensureRegionData(); return; }
+  }
   if(selectedAptIds.length) renderChart();
 }
 function onTrendOnlyChange(){
@@ -826,9 +831,50 @@ async function fetchBatch(lawdCd, ymds) {
 
 let refreshGen = 0;  // 조회 세대: 기간 변경 등으로 새 조회가 시작되면 이전 조회 결과를 폐기
 // suppressNew=true → '신규(+N)' 계산 생략(기간 변경 등, 실제 새 데이터가 아님)
+// ── 클라이언트 캐시(관심단지 실거래) ──────────────────────────────
+// 매 진입마다 구(區) 전체를 재조회하던 것을 캐시로 대체. transactions(내 단지만)+
+// regionAvg(작음)만 저장. regionData(구 전체·큼)는 제외 → 구 평균 토글 시 지연 로드.
+var TXCACHE_TTL = 30*60*1000;   // 30분 (batch.php 서버 캐시와 동일)
+function loadTxCache(){ try{ return JSON.parse(localStorage.getItem('apt_txcache')||'null'); }catch(e){ return null; } }
+function saveTxCache(){
+  try{ localStorage.setItem('apt_txcache', JSON.stringify({ts:Date.now(), period:currentPeriod, tx:transactions, ra:regionAvg})); }catch(e){}
+}
+// 선택된 단지의 구 데이터(regionData)가 없으면(캐시 진입 등) 지연 로드 → 구 평균 추이용
+var _regionLoading=false;
+async function ensureRegionData(){
+  if(_regionLoading) return;
+  const ymds=getLastNMonths(currentPeriod);
+  const codes=[]; selectedAptIds.forEach(s=>{ const a=apartments.find(x=>x.id===s.aptId); if(a&&a.lawdCd&&!regionData[a.lawdCd]&&codes.indexOf(a.lawdCd)<0) codes.push(a.lawdCd); });
+  if(!codes.length){ renderChart(); return; }
+  _regionLoading=true;
+  toast('구 평균 불러오는 중…',1500);
+  try{
+    await Promise.all(codes.map(async code=>{
+      try{ const br=await fetchBatch(code, ymds); const all=Object.values(br).flat().filter(Boolean); computeRegionAvg(code, all); }catch(e){}
+    }));
+  } finally { _regionLoading=false; }
+  saveTxCache();
+  if(showRegionAvg && selectedAptIds.length) renderChart();
+}
+
 async function refreshAll(suppressNew){
   if(!apartments.length) return;
   const gen = ++refreshGen;   // 이 조회의 세대 (더 최신 조회가 시작되면 gen !== refreshGen)
+
+  // ── 캐시 우선 렌더: 재방문 시 즉시 표시, 신선하면 네트워크 생략 ──
+  let paintedFromCache = false;
+  const cache = loadTxCache();
+  if(cache && cache.period===currentPeriod && cache.tx && apartments.every(a=>cache.tx[a.id])){
+    transactions = cache.tx;
+    regionAvg = cache.ra || {};
+    apartments.forEach(a=>{ newCounts[a.id]=0; });   // 캐시엔 신규 판정 없음
+    renderGrid();
+    if(selectedAptIds.length) renderChart();
+    paintedFromCache = true;
+    // 신선 + 구 평균 미사용이면 재조회 생략(구 평균 켜져 있으면 regionData 필요 → 계속 조회)
+    if(Date.now()-cache.ts < TXCACHE_TTL && !showRegionAvg){ isRefreshing=false; return; }
+    // 오래됐으면 아래에서 조용히(스피너 없이) 백그라운드 갱신
+  }
   isRefreshing=true;
 
   // 지역별 그룹화: 같은 lawdCd는 API 한 번만 호출
@@ -873,11 +919,12 @@ async function refreshAll(suppressNew){
   }));
 
   if(gen !== refreshGen) return;   // 최신 조회가 아니면 렌더/완료토스트 스킵
+  saveTxCache();   // 다음 진입을 위해 캐시 저장
   saveSeen();
   renderGrid();
   isRefreshing=false;
   if(selectedAptIds.length) renderChart();
-  toast('✅ 조회 완료!');
+  if(!paintedFromCache) toast('✅ 조회 완료!');   // 캐시로 이미 그렸으면 조용히 갱신
 }
 
 function renderGrid(){
