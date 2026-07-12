@@ -884,42 +884,54 @@ async function refreshAll(suppressNew){
     regionMap[apt.lawdCd].push(apt);
   });
 
-  const ymds = getLastNMonths(currentPeriod);   // 조회 시작 시점의 기간 스냅샷
-  // 지역별 병렬 조회
-  await Promise.all(Object.entries(regionMap).map(async ([lawdCd, apts]) => {
-    try {
-      const batchResult = await fetchBatch(lawdCd, ymds);
-      if(gen !== refreshGen) return;   // 더 최신 조회가 시작됨 → 이 결과 폐기(구 기간 덮어쓰기 방지)
-      const regionAll = Object.values(batchResult).flat().filter(Boolean);
-      computeRegionAvg(lawdCd, regionAll);   // 지역평균 대비용
+  const ymdsAll = getLastNMonths(currentPeriod);   // 조회 시작 시점의 기간 스냅샷 (최신월 우선)
+  // ── 점진적 로딩: 최근 개월 먼저 받아 빠르게 그리고, 나머지를 웨이브로 채움 ──
+  //  첫 웨이브 최근 12개월(빠른 첫 페인트) → 이후 24개월씩. 12개월 이하는 단일 웨이브.
+  //  단, 캐시로 이미 전체를 표시 중(paintedFromCache)이면 부분 렌더로 화면이 줄어드는
+  //  깜빡임을 막기 위해 단일 웨이브로 조용히 갱신.
+  const waves=[];
+  if(paintedFromCache || ymdsAll.length<=12){ waves.push(ymdsAll); }
+  else { waves.push(ymdsAll.slice(0,12)); for(let i=12;i<ymdsAll.length;i+=24) waves.push(ymdsAll.slice(i,i+24)); }
 
-      for (const apt of apts) {
-        if(!apartments.some(a=>a.id===apt.id)) continue;   // 조회 중 삭제된 아파트 스킵(고아 상태 방지)
-        // 이름+법정동 정확 일치 — 이웃/동명 단지 혼입 방지 (apt.dong 없으면 하위호환: 이름만)
-        const matched = regionAll.filter(tx => sameApt(tx, apt.aptName, apt.dong));
-        const result = {};
-        for(const p of apt.pyeongs){
-          result[p] = bucketByPyeong(matched, p);
+  const regionAccum={};   // lawdCd -> 누적 거래(웨이브마다 확장, 월 범위가 서로 겹치지 않아 중복 없음)
+  for(let w=0; w<waves.length; w++){
+    const wave=waves[w];
+    await Promise.all(Object.entries(regionMap).map(async ([lawdCd, apts]) => {
+      try {
+        const batchResult = await fetchBatch(lawdCd, wave);
+        if(gen !== refreshGen) return;   // 더 최신 조회가 시작됨 → 이 결과 폐기
+        const part = Object.values(batchResult).flat().filter(Boolean);
+        regionAccum[lawdCd] = (regionAccum[lawdCd]||[]).concat(part);
+        computeRegionAvg(lawdCd, regionAccum[lawdCd]);   // 누적분으로 지역평균/구데이터 갱신
+        for (const apt of apts) {
+          if(!apartments.some(a=>a.id===apt.id)) continue;   // 조회 중 삭제된 아파트 스킵
+          // 이름+법정동 정확 일치 — 이웃/동명 단지 혼입 방지 (apt.dong 없으면 이름만)
+          const matched = regionAccum[lawdCd].filter(tx => sameApt(tx, apt.aptName, apt.dong));
+          const result = {};
+          for(const p of apt.pyeongs) result[p] = bucketByPyeong(matched, p);
+          transactions[apt.id] = result;   // 누적분으로 재구성
         }
-        transactions[apt.id] = result;
-        const allTxs = Object.values(result).flat();
-        if(suppressNew){
-          newCounts[apt.id] = 0;   // 기간 변경 등: 창만 넓어졌을 뿐 새 거래 아님
-        } else {
-          const seen = lastSeen[apt.id]||new Set();
-          newCounts[apt.id] = allTxs.filter(tx=>!seen.has(tx.id)).length;
-        }
-        lastSeen[apt.id] = new Set(allTxs.map(t=>t.id));
+      } catch(e){
+        if(gen !== refreshGen) return;
+        console.error(`지역 ${lawdCd} 조회 실패:`, e.message);
+        if(w===waves.length-1) toast(`⚠ 조회 실패: ${e.message}`, 5000);
       }
-    } catch(e){
-      if(gen !== refreshGen) return;
-      console.error(`지역 ${lawdCd} 조회 실패:`, e.message);
-      toast(`⚠ 조회 실패: ${e.message}`, 5000);
-    }
-  }));
+    }));
+    if(gen !== refreshGen) return;
+    renderGrid();                                   // 웨이브별 렌더 — 첫 웨이브가 빠른 첫 페인트
+    if(selectedAptIds.length) renderChart();
+    if(w===0 && !paintedFromCache && waves.length>1) toast('최근 1년 먼저 표시 · 나머지 기간 불러오는 중…',1800);
+  }
 
-  if(gen !== refreshGen) return;   // 최신 조회가 아니면 렌더/완료토스트 스킵
-  saveTxCache();   // 다음 진입을 위해 캐시 저장
+  if(gen !== refreshGen) return;   // 최신 조회가 아니면 마감/캐시 스킵
+  // 전 기간 로드 완료 → 신규 판정(전체 기준) + 캐시 저장
+  apartments.forEach(apt=>{
+    const allTxs=Object.values(transactions[apt.id]||{}).flat();
+    if(suppressNew){ newCounts[apt.id]=0; }   // 기간 변경 등: 창만 넓어졌을 뿐
+    else { const seen=lastSeen[apt.id]||new Set(); newCounts[apt.id]=allTxs.filter(tx=>!seen.has(tx.id)).length; }
+    lastSeen[apt.id]=new Set(allTxs.map(t=>t.id));
+  });
+  saveTxCache();   // 다음 진입을 위해 캐시 저장(전체 기간)
   saveSeen();
   renderGrid();
   isRefreshing=false;
