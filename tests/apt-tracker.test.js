@@ -203,6 +203,19 @@ test('loess — 국소 가중회귀 스무딩 곡선', () => {
   assert.ok(mid < svm[0].y && mid < svm[svm.length-1].y);  // 중앙이 양끝보다 낮음
 });
 
+test('pyeongTrend — 월별 평균 평단가 → 상승률', () => {
+  assert.equal(L.pyeongTrend({ '202401': 1000, '202402': 1100 }), null);  // 3개월 미만
+  // 상승: 매월 +100 (월인덱스 간격 보존)
+  const up = L.pyeongTrend({ '202401': 1000, '202402': 1100, '202403': 1200 });
+  assert.ok(up > 0);
+  // 하락
+  const dn = L.pyeongTrend({ '202401': 1200, '202402': 1100, '202403': 1000 });
+  assert.ok(dn < 0);
+  // 횡보(동일값) ≈ 0
+  const flat = L.pyeongTrend({ '202401': 1000, '202402': 1000, '202403': 1000 });
+  assert.ok(Math.abs(flat) < 1e-6);
+});
+
 test('통합: 배치응답 → 매칭 → 평형버킷 → 통계 → 카드표시 (addApartment/refreshAll 흐름)', () => {
   // batch.php 가 돌려주는 형태를 fetchBatchChunk 가 변환한 tx 배열
   const regionAll = [

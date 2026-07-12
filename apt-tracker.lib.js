@@ -224,6 +224,26 @@
     return { slope: slope, intercept: (sy - slope * sx) / n };
   }
 
+  // 월별 평균 평단가 맵({'YYYYMM': avg}) → 상승률(%) or null.
+  //  월 인덱스(연*12+월) 간격을 보존해 최소제곱 회귀 → 첫→마지막 적합값 변화율.
+  //  관측 개월 3개 미만이면 null(추세 산출 불가). agg.php 의 mv 를 클라에서 계산.
+  function pyeongTrend(monthly) {
+    if (!monthly) return null;
+    var keys = [];
+    for (var k in monthly) if (monthly.hasOwnProperty(k) && monthly[k] > 0) keys.push(k);
+    if (keys.length < 3) return null;
+    keys.sort();
+    var pts = keys.map(function (ym) {
+      return { x: (parseInt(ym.slice(0, 4), 10) || 0) * 12 + ((parseInt(ym.slice(4, 6), 10) || 1) - 1), y: monthly[ym] };
+    });
+    var f = linreg(pts);
+    if (!f) return null;
+    var x0 = pts[0].x, x1 = pts[pts.length - 1].x;
+    var s = f.intercept + f.slope * x0, e = f.intercept + f.slope * x1;
+    if (s <= 0) return null;
+    return (e - s) / s * 100;
+  }
+
   // LOESS(국소 가중 선형회귀) 스무딩 — pts=[{x,y}] → steps+1개 {x,y} 곡선점.
   //  linreg 는 전체를 직선 1개로 적합하지만, loess 는 각 지점 주변만 가중회귀해
   //  국소 방향(굴곡)을 반영한 매끈한 추세 곡선을 만든다.
@@ -300,7 +320,8 @@
     bucketByPyeong: bucketByPyeong,
     growthRate: growthRate,
     linreg: linreg,
-    loess: loess
+    loess: loess,
+    pyeongTrend: pyeongTrend
   };
 
   if (typeof module !== 'undefined' && module.exports) {

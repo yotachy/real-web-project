@@ -99,6 +99,11 @@
   .disc-simsel{display:inline-flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;font-weight:700;color:var(--muted2);cursor:pointer;user-select:none;line-height:1;}
   .disc-simsel input{cursor:pointer;accent-color:var(--blue);width:17px;height:17px;margin:0;}
   .disc-simsel.on{color:var(--blue);}
+  .sim-axis{display:inline-flex;gap:3px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:3px;flex-wrap:wrap;}
+  .sim-axis-btn{background:none;border:none;color:var(--muted2);font-size:11px;font-weight:600;padding:5px 9px;border-radius:6px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:background .15s,color .15s;}
+  .sim-axis-btn b{color:var(--text);font-family:'IBM Plex Mono',monospace;margin-left:3px;}
+  .sim-axis-btn.on{background:var(--blue);color:#fff;}
+  .sim-axis-btn.on b{color:#fff;}
   .disc-row.is-ref{border:2px solid var(--blue);background:rgba(96,165,250,.12);box-shadow:0 0 0 3px rgba(96,165,250,.18);border-radius:10px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
   .chart-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
@@ -553,10 +558,11 @@
       <select id="disc-gu" class="disc-select" aria-label="구/군" onchange="onDiscGuChange()"></select>
       <div class="disc-pyeong" id="disc-pyeong" role="group" aria-label="평형"></div>
       <select id="disc-sort" class="disc-select" aria-label="정렬" onchange="renderDiscover()">
-        <option value="similar" id="disc-sort-similar" hidden>비슷한 가격순</option>
+        <option value="similar" id="disc-sort-similar" hidden>근접순</option>
         <option value="growth">상승률순</option>
         <option value="count">거래량순</option>
         <option value="avg">평단가순</option>
+        <option value="total">총액순</option>
       </select>
     </div>
     <div class="discover-note" id="discover-note"></div>
@@ -1592,8 +1598,8 @@ async function runDiscoverAll(){
       if(!rows){ try{ rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); aggCache[ck]=rows; }catch(e){ rows=[]; } }
       if(gen!==discGen) return;
       rows.forEach(a=>{ merged[reg.code+' '+a.n+' '+(a.u||'')]={
-        name:a.n, dong:a.u||'', avg:a.avg, count:a.cnt, latest:a.lp, latestY:a.ly, latestM:a.lm,
-        growth:null, regionDiff:null, isHigh:false, lawd:reg.code }; });
+        name:a.n, dong:a.u||'', avg:a.avg, total:a.tp||0, count:a.cnt, latest:a.lp, latestY:a.ly, latestM:a.lm,
+        growth:pyeongTrend(a.mv), regionDiff:null, isHigh:false, lawd:reg.code }; });
       done++;
       discRows=Object.values(merged);
       renderDiscover(done<regions.length ? `${done}/${regions.length}구 수집중…` : null);
@@ -1674,16 +1680,17 @@ function setDiscPyeong(p){ discPyeong=p; renderDiscPyeong(); if(discGu==='ALL') 
 function enterSimilar(ref){
   if(!ref || !ref.lawd) return;
   const band = discSimilar ? discSimilar.band : 5;   // 직전 밴드 유지, 기본 ±5%
+  const mode = discSimilar ? discSimilar.mode : 'avg';  // 매칭 축(평단가/총액) 유지
   setMode('discover', true);   // discSimilar 초기화됨 → 아래서 재설정 (자체 runDiscover)
-  discSimilar={ name:ref.name, dong:ref.dong||'', lawd:ref.lawd, avg:Math.round(ref.avg||0), band:band };
+  discSimilar={ name:ref.name, dong:ref.dong||'', lawd:ref.lawd, avg:Math.round(ref.avg||0), total:Math.round(ref.total||0), band:band, mode:mode };
   const region=REGIONS.find(r=>r.code===ref.lawd);
   if(region){ discCity=region.city; const ce=document.getElementById('disc-city'); if(ce) ce.value=discCity; updateDiscGu(discCity); }
   discGu='ALL';                                          // 구/군 전체가 기본
   const ge=document.getElementById('disc-gu'); if(ge) ge.value='ALL';
   if(ref.pyeong){ discPyeong=ref.pyeong; renderDiscPyeong(); }
-  discSort='avg';   // 비슷 검색 기본 정렬 = 평단가순 ('비슷한 가격순' 은 선택지로 유지)
+  discSort='growth';   // 비슷 검색 기본 정렬 = 추세(상승률)순 → 같은 값이라도 더 오르는 단지 위로
   const so=document.getElementById('disc-sort-similar'); if(so) so.hidden=false;
-  const se=document.getElementById('disc-sort'); if(se) se.value='avg';
+  const se=document.getElementById('disc-sort'); if(se) se.value='growth';
   syncSimilarUI();
   runDiscover();
 }
@@ -1693,9 +1700,11 @@ function openSimilar(){
   const sel=selectedAptIds[0];
   const apt=apartments.find(a=>a.id===sel.aptId);
   if(!apt){ return; }
-  const refAvg=avgPyeongPrice((transactions[sel.aptId]||{})[sel.pyeong]||[]);
+  const txs=(transactions[sel.aptId]||{})[sel.pyeong]||[];
+  const refAvg=avgPyeongPrice(txs);
   if(!refAvg){ toast('기준 단지의 평단가를 계산할 수 없어요'); return; }
-  enterSimilar({ name:apt.aptName, dong:apt.dong||'', lawd:apt.lawdCd, pyeong:sel.pyeong, avg:refAvg });
+  const refTotal = txs.length ? Math.round(txs.reduce((s,t)=>s+t.price,0)/txs.length) : 0;   // 평균 총액
+  enterSimilar({ name:apt.aptName, dong:apt.dong||'', lawd:apt.lawdCd, pyeong:sel.pyeong, avg:refAvg, total:refTotal });
 }
 // 리스트 행 체크박스(매번 1개만) → 그 단지를 기준으로. 기준행 재클릭 시 해제.
 function onSimCheck(idx){
@@ -1703,20 +1712,32 @@ function onSimCheck(idx){
   if(!row) return;
   const isRef=discSimilar && row.name===discSimilar.name && (row.dong||'')===(discSimilar.dong||'');
   if(isRef){ exitSimilar(); return; }
-  enterSimilar({ name:row.name, dong:row.dong, lawd:row.lawd||discGu, pyeong:discPyeong, avg:row.avg });
+  enterSimilar({ name:row.name, dong:row.dong, lawd:row.lawd||discGu, pyeong:discPyeong, avg:row.avg, total:row.total||row.latest||0 });
 }
 function syncSimilarUI(){
   const bar=document.getElementById('similar-bar');
   if(!bar) return;
   if(!discSimilar){ bar.style.display='none'; bar.innerHTML=''; return; }
   bar.style.display='';
+  const m=discSimilar.mode||'avg';
   bar.innerHTML=`
-    <div class="similar-info"><span class="similar-badge">기준</span><b>${escapeHtml(discSimilar.name)}</b>${discSimilar.dong?` <span class="disc-dong">${escapeHtml(discSimilar.dong)}</span>`:''} · 평단가 <b class="accent-color" id="sim-ref-avg">${discSimilar.avg.toLocaleString()}만/평</b></div>
+    <div class="similar-info"><span class="similar-badge">기준</span><b>${escapeHtml(discSimilar.name)}</b>${discSimilar.dong?` <span class="disc-dong">${escapeHtml(discSimilar.dong)}</span>`:''}</div>
+    <div class="sim-axis" role="group" aria-label="매칭 기준">
+      <button class="sim-axis-btn${m==='avg'?' on':''}" onclick="onSimModeChange('avg')">평단가 <b id="sim-ref-avg">${discSimilar.avg.toLocaleString()}만/평</b></button>
+      <button class="sim-axis-btn${m==='total'?' on':''}" onclick="onSimModeChange('total')">총액 <b id="sim-ref-total">${formatPrice(discSimilar.total||0)}</b></button>
+    </div>
     <div class="similar-ctrl">
-      <label for="disc-band">가격범위 ±<b id="disc-band-val">${discSimilar.band}</b>%</label>
-      <input type="range" id="disc-band" min="1" max="15" step="1" value="${discSimilar.band}" oninput="onBandInput(this.value)" aria-label="가격범위 퍼센트">
+      <label for="disc-band">±<b id="disc-band-val">${discSimilar.band}</b>%</label>
+      <input type="range" id="disc-band" min="1" max="15" step="1" value="${discSimilar.band}" oninput="onBandInput(this.value)" aria-label="매칭 범위 퍼센트">
       <button class="btn-ghost" onclick="exitSimilar()">해제</button>
     </div>`;
+}
+// 매칭 축 전환(평단가 ↔ 총액)
+function onSimModeChange(m){
+  if(!discSimilar || discSimilar.mode===m) return;
+  discSimilar.mode=m;
+  syncSimilarUI();
+  renderDiscover();
 }
 // 슬라이더 조절 → 즉시 재필터(클라이언트 계산, 재조회 없음)
 function onBandInput(v){
@@ -1777,7 +1798,7 @@ function computeAndRenderDiscover(){
     const avg=avgPyeongPrice(bucket);
     discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', latest:stats.latest.price, count:bucket.length,
       latestY:stats.latest.year, latestM:stats.latest.month,
-      growth:growthRate(bucket), avg,
+      growth:growthRate(bucket), avg, total:Math.round(bucket.reduce((s,t)=>s+t.price,0)/bucket.length),
       regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
   });
   renderDiscover();
@@ -1794,9 +1815,13 @@ function discRowHtml(r, idx, rank){
 
   // 정렬 기준 지표를 오른쪽에 크게 강조 (라벨 포함)
   let primVal, primLbl, primCls='accent-color';
-  if(discSort==='avg'){ primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
-  else if(discSort==='count'){ primVal=`${r.count}<span class="disc-unit">건</span>`; primLbl='거래량'; }
-  else { primVal=gTxt; primLbl='상승률'; primCls=gCls; }
+  const simMode = discSimilar ? (discSimilar.mode||'avg') : 'avg';
+  if(discSort==='count'){ primVal=`${r.count}<span class="disc-unit">건</span>`; primLbl='거래량'; }
+  else if(discSort==='growth'){ primVal=gTxt; primLbl='상승률'; primCls=gCls; }
+  else if(discSort==='total'){ primVal=formatPrice(r.total||0); primLbl='평균 총액'; }
+  else if(discSort==='avg'){ primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
+  else if(simMode==='total'){ primVal=formatPrice(r.total||0); primLbl='평균 총액'; }   // 근접순 + 총액축
+  else { primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
 
   // 메타: 정렬 기준 제외한 보조 지표만
   const rowMAgo=monthsSince(r.latestY, r.latestM);
@@ -1838,16 +1863,21 @@ function renderDiscover(progress){
   let rows=discRows.slice();
   // 비슷한 단지 모드: 기준 평단가 ±band% 로 필터 + 기준 단지는 상단 핀으로 분리
   let refRow=null;
+  const simMode = discSimilar ? (discSimilar.mode||'avg') : 'avg';
+  const refVal = discSimilar ? (simMode==='total' ? discSimilar.total : discSimilar.avg) : 0;
+  const candVal = r => simMode==='total' ? (r.total||0) : r.avg;
   if(discSimilar){
     refRow=discRows.find(r=>r.name===discSimilar.name && (r.dong||'')===(discSimilar.dong||''));
-    // 집계 데이터에 기준 단지가 있으면 그 평단가로 동기화(밴드 비교 일관성)
-    if(refRow && refRow.avg>0 && refRow.avg!==discSimilar.avg){
-      discSimilar.avg=refRow.avg;
-      const ra=document.getElementById('sim-ref-avg'); if(ra) ra.textContent=discSimilar.avg.toLocaleString()+'만/평';
+    // 집계 데이터에 기준 단지가 있으면 평단가·총액을 동기화(밴드 비교 일관성)
+    if(refRow){
+      if(refRow.avg>0){ discSimilar.avg=refRow.avg; const ra=document.getElementById('sim-ref-avg'); if(ra) ra.textContent=discSimilar.avg.toLocaleString()+'만/평'; }
+      if(refRow.total>0){ discSimilar.total=refRow.total; const rt=document.getElementById('sim-ref-total'); if(rt) rt.textContent=formatPrice(discSimilar.total); }
     }
+    const rv = simMode==='total' ? discSimilar.total : discSimilar.avg;
     rows=rows.filter(r=>{
       if(refRow && r===refRow) return false;
-      return Math.abs(r.avg-discSimilar.avg)/discSimilar.avg*100 <= discSimilar.band;
+      if(!rv) return false;
+      return Math.abs(candVal(r)-rv)/rv*100 <= discSimilar.band;
     });
   }
   if(discSort==='growth'){
@@ -1855,15 +1885,20 @@ function renderDiscover(progress){
     rows.sort((a,b)=>b.growth-a.growth);
   } else if(discSort==='count'){
     rows.sort((a,b)=>b.count-a.count);
+  } else if(discSort==='total'){
+    rows.sort((a,b)=>(b.total||0)-(a.total||0));
   } else if(discSort==='similar' && discSimilar){
-    rows.sort((a,b)=>Math.abs(a.avg-discSimilar.avg)-Math.abs(b.avg-discSimilar.avg));   // 기준가에 가까운 순
+    const rv = simMode==='total' ? discSimilar.total : discSimilar.avg;
+    rows.sort((a,b)=>Math.abs(candVal(a)-rv)-Math.abs(candVal(b)-rv));   // 기준에 가까운 순
   } else {
     rows.sort((a,b)=>b.avg-a.avg);
   }
   discShown=(refRow?[refRow]:[]).concat(rows.slice(0,40));
   const prog = progress ? ` · ${progress}` : '';
   if(discSimilar){
-    noteEl.textContent=`${discSimilar.name} 기준 평단가 ${discSimilar.avg.toLocaleString()}만/평 ±${discSimilar.band}% · ${regionName} ${PYEONG_DEFS[discPyeong].label} · 비슷한 단지 ${rows.length}곳${prog}`;
+    const axis = simMode==='total' ? `총액 ${formatPrice(discSimilar.total||0)}` : `평단가 ${discSimilar.avg.toLocaleString()}만/평`;
+    const sortTxt = discSort==='growth' ? '· 상승률순' : discSort==='avg' ? '· 평단가순' : discSort==='total' ? '· 총액순' : discSort==='similar' ? '· 근접순' : '';
+    noteEl.textContent=`${discSimilar.name} 기준 ${axis} ±${discSimilar.band}% · ${regionName} ${PYEONG_DEFS[discPyeong].label} · 비슷한 단지 ${rows.length}곳 ${sortTxt}${prog}`;
   } else {
     const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
       : discSort==='count' ? '거래량순' : '평단가순';

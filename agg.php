@@ -27,7 +27,7 @@ if ($lawd === '' || !$ymds) fail(400, 'LAWD/YMDS 파라미터 없음');
 
 // 집계 결과 캐시 (구 + 기간 + 평형버킷)
 $aggDir  = $cacheDir . '/agg';
-$aggPath = $aggDir . '/' . $lawd . '_' . md5(implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
+$aggPath = $aggDir . '/' . $lawd . '_' . md5('v2|' . implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
 if (is_file($aggPath) && (time() - filemtime($aggPath)) < CACHE_TTL) {
     $d = @file_get_contents($aggPath);
     if ($d !== false) { echo $d; exit; }
@@ -43,11 +43,16 @@ foreach ($ymds as $ymd) {
         if ($r['p'] <= 0) continue;
         $u = (int)round($r['p'] / ($area / $M2));   // 평단가(만원/평)
         if ($u <= 0) continue;
+        $ym = $r['y'] . str_pad($r['m'], 2, '0', STR_PAD_LEFT);
         $k = $r['n'] . "\0" . $r['u'];
-        if (!isset($agg[$k])) $agg[$k] = ['n' => $r['n'], 'u' => $r['u'], 'sum' => 0, 'cnt' => 0, 'lp' => 0, 'ld' => '', 'ly' => '', 'lm' => ''];
-        $agg[$k]['sum'] += $u;
+        if (!isset($agg[$k])) $agg[$k] = ['n' => $r['n'], 'u' => $r['u'], 'sum' => 0, 'psum' => 0, 'cnt' => 0, 'lp' => 0, 'ld' => '', 'ly' => '', 'lm' => '', 'mo' => []];
+        $agg[$k]['sum']  += $u;        // 평단가 합
+        $agg[$k]['psum'] += $r['p'];   // 총액 합
         $agg[$k]['cnt']++;
-        $date = $r['y'] . str_pad($r['m'], 2, '0', STR_PAD_LEFT) . str_pad($r['d'], 2, '0', STR_PAD_LEFT);
+        if (!isset($agg[$k]['mo'][$ym])) $agg[$k]['mo'][$ym] = [0, 0];
+        $agg[$k]['mo'][$ym][0] += $u;   // 월별 평단가 합
+        $agg[$k]['mo'][$ym][1] += 1;    // 월별 건수
+        $date = $ym . str_pad($r['d'], 2, '0', STR_PAD_LEFT);
         if ($date > $agg[$k]['ld']) {
             $agg[$k]['ld'] = $date;
             $agg[$k]['lp'] = $r['p'];
@@ -59,14 +64,18 @@ foreach ($ymds as $ymd) {
 $rows = [];
 foreach ($agg as $a) {
     if ($a['cnt'] < 3) continue;   // 노이즈 방지
+    $mv = [];   // 월별 평균 평단가 (클라이언트가 추세 계산)
+    foreach ($a['mo'] as $ym => $sc) $mv[$ym] = (int)round($sc[0] / $sc[1]);
     $rows[] = [
         'n'   => $a['n'],
         'u'   => $a['u'],
-        'avg' => (int)round($a['sum'] / $a['cnt']),
+        'avg' => (int)round($a['sum'] / $a['cnt']),   // 평균 평단가
+        'tp'  => (int)round($a['psum'] / $a['cnt']),  // 평균 총액(만원)
         'cnt' => $a['cnt'],
         'lp'  => $a['lp'],
         'ly'  => $a['ly'],
         'lm'  => $a['lm'],
+        'mv'  => $mv,
     ];
 }
 $out = json_encode(['rows' => $rows], JSON_UNESCAPED_UNICODE);
