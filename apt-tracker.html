@@ -1815,8 +1815,8 @@ async function runDiscover(){
 }
 
 // 단지 검색(단일 구)은 최근 window 로 제한 → 3년 원시조회 과부하 방지(랭킹엔 충분).
-// 상위 기간 버튼이 12개월 이하면 그 값을, 3년/5년이면 12개월로 캡.
-function discPeriodM(){ return Math.min(currentPeriod, 12); }
+// 상위 기간 버튼이 6개월 이하면 그 값을, 그 이상이면 6개월로 캡.
+function discPeriodM(){ return Math.min(currentPeriod, 6); }
 function computeAndRenderDiscover(){
   const regionAll=discCache[`${discGu}_${discPeriodM()}`];
   if(!regionAll) return;
