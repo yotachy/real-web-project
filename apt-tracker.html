@@ -1577,8 +1577,15 @@ async function fetchAgg(lawd, ymds, pmin, pmax){
   const j=await r.json();
   return (j && j.rows) ? j.rows : [];
 }
+// 집계 결과를 localStorage 에도 캐시(3시간) → 새로고침·세션 넘어 재사용(콜드 최소화)
+var AGG_LS_TTL=3*3600*1000;
+function loadAggLS(key){ try{ const v=JSON.parse(localStorage.getItem('aggc:'+key)||'null'); if(v && (Date.now()-v.t)<AGG_LS_TTL) return v.r; }catch(e){} return null; }
+function saveAggLS(key, rows){
+  try{ localStorage.setItem('aggc:'+key, JSON.stringify({t:Date.now(), r:rows})); }
+  catch(e){ try{ Object.keys(localStorage).forEach(k=>{ if(k.indexOf('aggc:')===0) localStorage.removeItem(k); }); localStorage.setItem('aggc:'+key, JSON.stringify({t:Date.now(), r:rows})); }catch(e2){} }
+}
 // 전체 구를 연속 워커 풀로 집계 → 도착하는 대로 점진적 리스트업(배치 대기 없음 → 빠름)
-const ALL_MONTHS = 6;   // 전체 검색은 최근 6개월 평단가로 제한(속도·upstream 부하)
+const ALL_MONTHS = 5;   // 전체 검색은 최근 5개월 평단가로 제한(속도·upstream 부하)
 async function runDiscoverAll(){
   const gen=++discGen;
   const resultsEl=document.getElementById('discover-results');
@@ -1590,14 +1597,15 @@ async function runDiscoverAll(){
   discRows=[]; const merged={}; let done=0, next=0;
   const scopeLabel = discGu==='ALL' ? `${discCity} 전체` : ((REGIONS.find(r=>r.code===discGu)||{}).name||'');
   resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> ${escapeHtml(scopeLabel)} 평단가 수집중… 0/${regions.length}구</div>`;
-  const POOL=8;   // 동시 집계 구 수. 각 구=6개월 단일 웨이브 → 최대 동시 upstream ~48 (WAF 임계 60 미만)
+  const POOL=10;   // 동시 집계 구 수. 각 구=5개월 단일 웨이브 → 최대 동시 upstream ~50 (WAF 임계 60 미만)
   async function worker(){
     while(next < regions.length){
       if(gen!==discGen) return;
       const reg=regions[next++];
       const ck=`${reg.code}_${ymdsKey}_${discPyeong}`;
-      let rows=aggCache[ck];
-      if(!rows){ try{ rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); aggCache[ck]=rows; }catch(e){ rows=[]; } }
+      let rows=aggCache[ck] || loadAggLS(ck);
+      if(rows){ aggCache[ck]=rows; }
+      else { try{ rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); aggCache[ck]=rows; saveAggLS(ck, rows); }catch(e){ rows=[]; } }
       if(gen!==discGen) return;
       rows.forEach(a=>{ merged[reg.code+' '+a.n+' '+(a.u||'')]={
         name:a.n, dong:a.u||'', avg:a.avg, total:a.tp||0, count:a.cnt, latest:a.lp, latestY:a.ly, latestM:a.lm,

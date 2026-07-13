@@ -10,6 +10,10 @@
  */
 require __DIR__ . '/batch.php';   // 함수(collect_raw/parse_slim/...) + $API_KEY + $cacheDir 재사용
 
+// 집계 결과 캐시 TTL — 6개월 평단가 집계는 시간단위로 거의 안 변함 → 길게(3시간).
+// (원시 XML 캐시는 batch.php 의 30분 유지: 관심목록 신선도용)
+const AGG_TTL = 10800;
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
@@ -28,7 +32,7 @@ if ($lawd === '' || !$ymds) fail(400, 'LAWD/YMDS 파라미터 없음');
 // 집계 결과 캐시 (구 + 기간 + 평형버킷)
 $aggDir  = $cacheDir . '/agg';
 $aggPath = $aggDir . '/' . $lawd . '_' . md5('v2|' . implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
-if (is_file($aggPath) && (time() - filemtime($aggPath)) < CACHE_TTL) {
+if (is_file($aggPath) && (time() - filemtime($aggPath)) < AGG_TTL) {
     $d = @file_get_contents($aggPath);
     if ($d !== false) { echo $d; exit; }
 }
