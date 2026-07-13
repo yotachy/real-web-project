@@ -107,6 +107,8 @@
   .sim-axis-pyeong{display:inline-flex;align-items:center;padding:5px 10px;border-radius:6px;background:rgba(96,165,250,.14);color:var(--blue);font-size:11px;font-weight:800;white-space:nowrap;}
   .disc-pyeong-btn:disabled,.disc-pyeong-btn.locked{opacity:.35;cursor:not-allowed;}
   .watch-badge{display:inline-block;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent);font-size:9px;font-weight:800;padding:1px 6px;border-radius:99px;vertical-align:middle;}
+  .disc-notx{color:var(--muted);font-size:12px;font-weight:600;}
+  .disc-row.is-notx{opacity:.72;}
   .disc-row.is-ref{border:2px solid var(--blue);background:rgba(96,165,250,.12);box-shadow:0 0 0 3px rgba(96,165,250,.18);border-radius:10px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
   .chart-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
@@ -1647,7 +1649,17 @@ async function runDiscoverAll(){
   const n=Math.min(POOL, regions.length), workers=[];
   for(let w=0; w<n; w++) workers.push(worker());
   await Promise.all(workers);
-  if(gen===discGen) tick(true);   // 최종 확정 렌더
+  if(gen===discGen){
+    // 관심단지는 무조건 노출(거래 없으면 '거래없음'). 비슷 모드는 후보 매칭이라 제외.
+    if(!discSimilar) apartments.forEach(a=>{
+      if(!a.pyeongs.includes(discPyeong)) return;
+      if(discGu!=='ALL' && a.lawdCd!==discGu) return;
+      const key=a.lawdCd+' '+a.aptName+' '+(a.dong||'');
+      if(merged[key]) return;
+      merged[key]={ name:a.aptName, dong:a.dong||'', lawd:a.lawdCd, watched:true, noTx:true, avg:0, total:0, count:0, growth:null, latest:0, latestY:null, latestM:null, regionDiff:null, isHigh:false };
+    });
+    tick(true);   // 최종 확정 렌더
+  }
 }
 let discRows=[];    // 현재 구·평형의 계산 결과
 let discShown=[];   // 정렬·TOP 적용된 렌더 대상 (관심추가 인덱스 참조)
@@ -1856,13 +1868,12 @@ function computeAndRenderDiscover(){
       growth:growthRate(bucket), avg, total:Math.round(bucket.reduce((s,t)=>s+t.price,0)/bucket.length),
       regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
   });
-  // 관심단지는 거래 3건 미만이어도 목록에 노출(내 단지 확인·비교용). 6개월 내 없으면 관심목록 자체 데이터 사용.
+  // 관심단지는 무조건 노출(내 단지 확인용). 해당 기간 거래 없으면 '거래없음' 으로 표기.
   apartments.forEach(a=>{
     if(a.lawdCd!==discGu || !a.pyeongs.includes(discPyeong)) return;
     if(discRows.some(r=>r.name===a.aptName && (r.dong||'')===(a.dong||''))) return;
-    let src=bucketByPyeong(byKey[aptGroupKey(a.aptName, a.dong)]||[], discPyeong);
-    if(!src.length) src=(transactions[a.id]||{})[discPyeong]||[];
-    if(!src.length) return;
+    const src=bucketByPyeong(byKey[aptGroupKey(a.aptName, a.dong)]||[], discPyeong);
+    if(!src.length){ discRows.push({ name:a.aptName, dong:a.dong||'', watched:true, noTx:true, avg:0, total:0, count:0, growth:null, latest:0, latestY:null, latestM:null, regionDiff:null, isHigh:false }); return; }
     const st=calcStats(src), av=avgPyeongPrice(src);
     discRows.push({ name:a.aptName, dong:a.dong||'', latest:st.latest.price, count:src.length,
       latestY:st.latest.year, latestM:st.latest.month, growth:growthRate(src), avg:av,
@@ -1882,30 +1893,36 @@ function discRowHtml(r, idx, rank){
   const gCls = g==null ? 'neu-color' : g>=0 ? 'up-color' : 'down-color';
 
   // 정렬 기준 지표를 오른쪽에 크게 강조 (라벨 포함)
-  let primVal, primLbl, primCls='accent-color';
+  let primVal, primLbl, primCls='accent-color', metaStr;
   const simMode = discSimilar ? (discSimilar.mode||'avg') : 'avg';
-  if(discSort==='count'){ primVal=`${r.count}<span class="disc-unit">건</span>`; primLbl='거래량'; }
-  else if(discSort==='growth'){ primVal=gTxt; primLbl='상승률'; primCls=gCls; }
-  else if(discSort==='total'){ primVal=formatPrice(r.total||0); primLbl='평균 총액'; }
-  else if(discSort==='avg'){ primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
-  else if(simMode==='total'){ primVal=formatPrice(r.total||0); primLbl='평균 총액'; }   // 근접순 + 총액축
-  else { primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
+  if(r.noTx){   // 관심단지인데 해당 기간 거래 없음
+    primVal='<span class="disc-notx">거래없음</span>'; primLbl=''; primCls='';
+    const gu=(discGu==='ALL'&&r.lawd)?((REGIONS.find(x=>x.code===r.lawd)||{}).gu||''):'';
+    metaStr=(gu?`<span class="accent-color">${escapeHtml(gu)}</span> · `:'')+`최근 ${periodLabel(discGu==='ALL'?ALL_MONTHS:discPeriodM())} 거래 없음`;
+  } else {
+    if(discSort==='count'){ primVal=`${r.count}<span class="disc-unit">건</span>`; primLbl='거래량'; }
+    else if(discSort==='growth'){ primVal=gTxt; primLbl='상승률'; primCls=gCls; }
+    else if(discSort==='total'){ primVal=formatPrice(r.total||0); primLbl='평균 총액'; }
+    else if(discSort==='avg'){ primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
+    else if(simMode==='total'){ primVal=formatPrice(r.total||0); primLbl='평균 총액'; }   // 근접순 + 총액축
+    else { primVal=`${r.avg.toLocaleString()}<span class="disc-unit">만/평</span>`; primLbl='평단가'; }
+    // 메타: 정렬 기준 제외한 보조 지표만
+    const rowMAgo=monthsSince(r.latestY, r.latestM);
+    const rowStale=rowMAgo>=6?` <span class="stale-tag">${agoLabel(rowMAgo)}</span>`:'';
+    const meta=[`최근 ${formatPrice(r.latest)}${rowStale}`];
+    if(discGu==='ALL' && r.lawd){ const rg=REGIONS.find(x=>x.code===r.lawd); if(rg) meta.unshift(`<span class="accent-color">${escapeHtml(rg.gu)}</span>`); }
+    if(discSort!=='count') meta.push(`${r.count}건`);
+    if(discSort!=='avg') meta.push(`${r.avg.toLocaleString()}만/평`);
+    if(discSort!=='growth' && g!=null) meta.push(`<span class="${gCls}">${gTxt}</span>`);
+    if(r.regionDiff!=null) meta.push(`<span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`);
+    metaStr=meta.join(' · ');
+  }
 
-  // 메타: 정렬 기준 제외한 보조 지표만
-  const rowMAgo=monthsSince(r.latestY, r.latestM);
-  const rowStale=rowMAgo>=6?` <span class="stale-tag">${agoLabel(rowMAgo)}</span>`:'';
-  const meta=[`최근 ${formatPrice(r.latest)}${rowStale}`];
-  if(discGu==='ALL' && r.lawd){ const rg=REGIONS.find(x=>x.code===r.lawd); if(rg) meta.unshift(`<span class="accent-color">${escapeHtml(rg.gu)}</span>`); }   // 전체: 어느 구인지 표시
-  if(discSort!=='count') meta.push(`${r.count}건`);
-  if(discSort!=='avg') meta.push(`${r.avg.toLocaleString()}만/평`);
-  if(discSort!=='growth' && g!=null) meta.push(`<span class="${gCls}">${gTxt}</span>`);
-  if(r.regionDiff!=null) meta.push(`<span class="${r.regionDiff>=0?'up-color':'down-color'}">지역평균 ${r.regionDiff>=0?'+':''}${Math.round(r.regionDiff)}%</span>`);
-
-  return `<div class="disc-row${isRef?' is-ref':''}">
+  return `<div class="disc-row${isRef?' is-ref':''}${r.noTx?' is-notx':''}">
     <div class="disc-rank">${isRef?'<span class="similar-badge">기준</span>':rank}</div>
     <div class="disc-main">
       <div class="disc-name">${escapeHtml(r.name)}${r.dong?` <span class="disc-dong">${escapeHtml(r.dong)}</span>`:''} ${r.watched?'<span class="watch-badge">관심</span>':''}${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
-      <div class="disc-meta">${meta.join(' · ')}</div>
+      <div class="disc-meta">${metaStr}</div>
     </div>
     <div class="disc-metric">
       <div class="disc-metric-val ${primCls}">${primVal}</div>
