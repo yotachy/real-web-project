@@ -91,8 +91,8 @@ test('calcStats — 변동률/최저/최고/고점대비/신고저/건수', () =
 });
 
 test('평단가 — pyeongUnitPrice / avgPyeongPrice', () => {
-  // 84.95㎡ ≈ 25.7평, 230000만원 → 약 8,948 만원/평
-  assert.equal(L.pyeongUnitPrice(230000, 84.95), Math.round(230000 / (84.95 / 3.3058)));
+  // 공급면적 기준(전용/0.74). 84.95㎡ 전용 → 공급 ~114.8㎡, 230000만원
+  assert.equal(L.pyeongUnitPrice(230000, 84.95), Math.round(230000 / ((84.95 / 0.74) / 3.3058)));
   assert.equal(L.pyeongUnitPrice(0, 84), 0);
   assert.equal(L.pyeongUnitPrice(1000, 0), 0);
   const avg = L.avgPyeongPrice([{ price: 100000, area: 84 }, { price: 120000, area: 84 }]);

@@ -31,7 +31,7 @@ if ($lawd === '' || !$ymds) fail(400, 'LAWD/YMDS 파라미터 없음');
 
 // 집계 결과 캐시 (구 + 기간 + 평형버킷)
 $aggDir  = $cacheDir . '/agg';
-$aggPath = $aggDir . '/' . $lawd . '_' . md5('v2|' . implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
+$aggPath = $aggDir . '/' . $lawd . '_' . md5('v3|' . implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
 if (is_file($aggPath) && (time() - filemtime($aggPath)) < AGG_TTL) {
     $d = @file_get_contents($aggPath);
     if ($d !== false) { echo $d; exit; }
@@ -39,13 +39,14 @@ if (is_file($aggPath) && (time() - filemtime($aggPath)) < AGG_TTL) {
 
 $rawMap = collect_raw($cacheDir, $lawd, $ymds, $API_KEY);
 $M2 = 3.3058;
+$EXCL = 0.74;   // 전용률(공급면적 추정). 평단가 = 거래가 / (공급평), 공급 = 전용/전용률.
 $agg = [];
 foreach ($ymds as $ymd) {
     foreach (parse_slim(isset($rawMap[$ymd]) ? $rawMap[$ymd] : '') as $r) {
         $area = (float)$r['a'];
         if ($area <= 0 || $area < $pmin || $area >= $pmax) continue;
         if ($r['p'] <= 0) continue;
-        $u = (int)round($r['p'] / ($area / $M2));   // 평단가(만원/평)
+        $u = (int)round($r['p'] / (($area / $EXCL) / $M2));   // 공급면적 기준 평단가(만원/평)
         if ($u <= 0) continue;
         $ym = $r['y'] . str_pad($r['m'], 2, '0', STR_PAD_LEFT);
         $k = $r['n'] . "\0" . $r['u'];

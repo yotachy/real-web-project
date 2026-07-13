@@ -19,6 +19,7 @@
   };
 
   var M2_PER_PYEONG = 3.3058;
+  var EXCL_RATIO = 0.74;   // 전용률(공급면적 추정용). 평단가를 공급면적 기준으로.
 
   // 만원 단위 금액 → '20.4억' / '8,500만' / '-'
   function formatPrice(v) {
@@ -112,9 +113,11 @@
   }
 
   // 평단가(만원/평) = 거래금액(만원) / 전용평. area 는 ㎡.
+  // 공급면적 기준 평단가(광고 '평당가'와 동일 관점). 국토부는 전용면적만 주므로
+  // 공급면적 = 전용면적 / 전용률(EXCL_RATIO) 로 추정. 전용률은 단지별로 다른 근사치.
   function pyeongUnitPrice(price, areaM2) {
     if (!price || !areaM2) return 0;
-    return Math.round(price / (areaM2 / M2_PER_PYEONG));
+    return Math.round(price / ((areaM2 / EXCL_RATIO) / M2_PER_PYEONG));
   }
 
   // 거래 배열의 평균 평단가(만원/평)
