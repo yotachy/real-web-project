@@ -1590,13 +1590,22 @@ async function runDiscoverAll(){
   const gen=++discGen;
   const resultsEl=document.getElementById('discover-results');
   // 전체면 시/도 전체 구, 특정 구면 그 구 하나만 집계(비슷 모드에서 구를 좁힌 경우)
-  const regions = discGu==='ALL' ? REGIONS.filter(r=>r.city===discCity) : REGIONS.filter(r=>r.code===discGu);
+  let regions = discGu==='ALL' ? REGIONS.filter(r=>r.city===discCity) : REGIONS.filter(r=>r.code===discGu);
+  // 기준 단지의 구를 맨 앞으로 → 가장 관련 높은 결과(기준+동네 유사가)가 즉시 표시
+  if(discSimilar && discSimilar.lawd){
+    regions=regions.slice().sort((a,b)=>(a.code===discSimilar.lawd?-1:b.code===discSimilar.lawd?1:0));
+  }
   const def=PYEONG_DEFS[discPyeong];
   const ymds=getLastNMonths(Math.min(currentPeriod, ALL_MONTHS));
   const ymdsKey=ALL_MONTHS+'m_'+ymds[0];
-  discRows=[]; const merged={}; let done=0, next=0;
+  discRows=[]; const merged={}; let done=0, next=0, lastRender=0;
   const scopeLabel = discGu==='ALL' ? `${discCity} 전체` : ((REGIONS.find(r=>r.code===discGu)||{}).name||'');
   resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> ${escapeHtml(scopeLabel)} 평단가 수집중… 0/${regions.length}구</div>`;
+  // 진행 중 렌더는 200ms 간격으로 throttle(25회 DOM 재빌드 렉 방지). 완료 시엔 강제 렌더.
+  function tick(final){
+    const t=Date.now();
+    if(final || t-lastRender>200){ lastRender=t; discRows=Object.values(merged); renderDiscover(final?null:`${done}/${regions.length}구 수집중…`); }
+  }
   const POOL=10;   // 동시 집계 구 수. 각 구=5개월 단일 웨이브 → 최대 동시 upstream ~50 (WAF 임계 60 미만)
   async function worker(){
     while(next < regions.length){
@@ -1611,13 +1620,13 @@ async function runDiscoverAll(){
         name:a.n, dong:a.u||'', avg:a.avg, total:a.tp||0, count:a.cnt, latest:a.lp, latestY:a.ly, latestM:a.lm,
         growth:pyeongTrend(a.mv), regionDiff:null, isHigh:false, lawd:reg.code }; });
       done++;
-      discRows=Object.values(merged);
-      renderDiscover(done<regions.length ? `${done}/${regions.length}구 수집중…` : null);
+      tick(done>=regions.length);
     }
   }
   const n=Math.min(POOL, regions.length), workers=[];
   for(let w=0; w<n; w++) workers.push(worker());
   await Promise.all(workers);
+  if(gen===discGen) tick(true);   // 최종 확정 렌더
 }
 let discRows=[];    // 현재 구·평형의 계산 결과
 let discShown=[];   // 정렬·TOP 적용된 렌더 대상 (관심추가 인덱스 참조)
