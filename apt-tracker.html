@@ -482,7 +482,7 @@
         <span class="budget-unit">억</span>
       </div>
       <button class="btn-theme" id="theme-btn" onclick="toggleTheme()" title="라이트 테마로" aria-label="테마 전환">🌙</button>
-      <button class="btn-sync" onclick="openSyncModal()" title="관심목록 동기화 — 다른 기기에서도 보기" aria-label="관심목록 동기화">☁ 동기화</button>
+      <button class="btn-sync" onclick="pullShared()" title="공유 관심목록을 서버에서 다시 불러오기" aria-label="서버에서 새로고침">☁ 새로고침</button>
       <button class="btn-add" onclick="openAddModal()">＋ 아파트 추가</button>
     </div>
   </div>
@@ -819,11 +819,27 @@ function genSyncCode(){
   for(var i=0;i<8;i++) s+=alpha.charAt(Math.floor(Math.random()*alpha.length));
   return s.slice(0,4)+'-'+s.slice(4);
 }
-function getSyncCode(){
-  var c=null; try{ c=localStorage.getItem('apt_sync_code'); }catch(e){}
-  if(!c){ c=genSyncCode(); try{ localStorage.setItem('apt_sync_code',c); }catch(e){} }
-  return c;
+// 2인 공유: 고정 코드로 서버에 저장 → 브라우저·기기 무관 동일 목록(매번 추가 불필요).
+var SHARED_CODE='AptRealShared01';
+function getSyncCode(){ return SHARED_CODE; }
+// 서버(공유 목록)를 소스오브트루스로 로드. 로컬은 빠른 초기표시용 캐시.
+async function loadShared(){
+  try{
+    var r=await fetch('sync.php?code='+SHARED_CODE);
+    var j=await r.json();
+    if(j && j.apartments && j.apartments.length){
+      apartments=j.apartments;
+      lastSeen={}; if(j.seen) for(var k in j.seen) lastSeen[k]=new Set(j.seen[k]);
+      try{ localStorage.setItem('apt_list2', JSON.stringify(apartments)); var raw={}; for(var kk in lastSeen) raw[kk]=[].slice.call(lastSeen[kk]); localStorage.setItem('apt_seen2', JSON.stringify(raw)); }catch(e){}
+      renderGrid();
+    } else if(apartments.length){
+      pushSync();   // 서버 비었고 로컬에 목록 있으면 서버로 이관
+    }
+  }catch(e){}
+  if(apartments.length) refreshAll();
 }
+// ☁ 버튼: 다른 사용자가 바꾼 공유 목록을 서버에서 다시 불러오기
+function pullShared(){ loadShared(); toast('☁ 서버에서 관심목록을 불러왔어요'); }
 var _syncTimer=null;
 function pushSync(){   // 디바운스 저장(연속 변경을 800ms 뒤 1회로)
   var code=getSyncCode().replace(/[^A-Za-z0-9]/g,'');
@@ -2716,7 +2732,7 @@ document.addEventListener('keydown', e => {
   const _rac=document.getElementById('region-avg-check'); if(_rac) _rac.checked=showRegionAvg;
   const _toc=document.getElementById('trend-only-check'); if(_toc) _toc.checked=trendOnly;
   syncTogglePill('region-avg-check', showRegionAvg); syncTogglePill('trend-only-check', trendOnly);
-  if(apartments.length>0) refreshAll();
+  loadShared();   // 서버(공유 목록) 로드 → 없으면 로컬 사용 + 서버 이관. 이후 refreshAll.
 })();
 </script>
 </body>
