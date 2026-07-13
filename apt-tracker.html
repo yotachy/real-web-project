@@ -1826,12 +1826,11 @@ async function runDiscover(){
   const gen=++discGen;
   resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> 조회중...</div>`;
   document.getElementById('discover-note').textContent='';
-  const dm=discPeriodM();
-  const ck=`${discGu}_${dm}`;
+  const ck=`${discGu}_${UNIVERSE_MONTHS}`;   // 3년 열거(그동안 거래된 단지 다)
   let regionAll=discCache[ck];
   if(!regionAll){
     try{
-      const ymds=getLastNMonths(dm);
+      const ymds=getLastNMonths(UNIVERSE_MONTHS);
       const br=await fetchBatch(discGu, ymds);
       if(gen!==discGen) return;   // 더 최신 요청 있음 → 폐기
       regionAll=Object.values(br).flat().filter(Boolean);
@@ -1847,38 +1846,46 @@ async function runDiscover(){
   computeAndRenderDiscover();
 }
 
-// 단지 검색(단일 구)은 최근 window 로 제한 → 3년 원시조회 과부하 방지(랭킹엔 충분).
-// 상위 기간 버튼이 6개월 이하면 그 값을, 그 이상이면 6개월로 캡.
+// 단지 열거 기간(그동안 거래된 단지 전부 뽑기용). 평단가·추세는 아래 최근 window 로 계산.
+const UNIVERSE_MONTHS = 36;
+// 평단가·추세 표시용 '최근 기간'. 이 기간 거래 없으면 '거래없음' 표기.
 function discPeriodM(){ return Math.min(currentPeriod, 6); }
+function recentCutYm(){ const n=discPeriodM(); const now=new Date(); const c=new Date(now.getFullYear(), now.getMonth()-(n-1), 1); return ''+c.getFullYear()+String(c.getMonth()+1).padStart(2,'0'); }
 function computeAndRenderDiscover(){
-  const regionAll=discCache[`${discGu}_${discPeriodM()}`];
+  const regionAll=discCache[`${discGu}_${UNIVERSE_MONTHS}`];   // 3년 열거
   if(!regionAll) return;
+  const cut=recentCutYm();   // 최근 기간 경계(YYYYMM)
   const byKey={};   // 이름+법정동으로 그룹핑(동명 아파트 분리)
   regionAll.forEach(tx=>{ const k=aptGroupKey(tx.aptName, tx.dong); (byKey[k]=byKey[k]||[]).push(tx); });
+  // 지역평균은 최근 기간 기준
   const rAvg=(regionAvg[discGu]||{})[discPyeong]||0;
+  const watchedSet={};   // 관심단지 표시용
+  apartments.forEach(a=>{ if(a.lawdCd===discGu && a.pyeongs.includes(discPyeong)) watchedSet[aptGroupKey(a.aptName, a.dong)]=1; });
   discRows=[];
   Object.keys(byKey).forEach(k=>{
     const grp=byKey[k];
-    const bucket=bucketByPyeong(grp, discPyeong);
-    if(bucket.length<1) return;   // 거래 1건이라도 있으면 노출(누락 방지)
-    const stats=calcStats(bucket);
-    const avg=avgPyeongPrice(bucket);
-    discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', latest:stats.latest.price, count:bucket.length,
-      latestY:stats.latest.year, latestM:stats.latest.month,
-      growth:growthRate(bucket), avg, total:Math.round(bucket.reduce((s,t)=>s+t.price,0)/bucket.length),
-      regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
+    const bucket=bucketByPyeong(grp, discPyeong);   // 3년 중 해당 평형
+    if(!bucket.length) return;   // 이 평형 거래가 3년내 없음 → 다른 평형 단지
+    const isW=!!watchedSet[k];
+    const recent=bucket.filter(t=>(''+t.year+String(t.month).padStart(2,'0'))>=cut);
+    if(recent.length){
+      const stats=calcStats(recent), avg=avgPyeongPrice(recent);
+      discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', latest:stats.latest.price, count:recent.length,
+        latestY:stats.latest.year, latestM:stats.latest.month, growth:growthRate(recent), avg,
+        total:Math.round(recent.reduce((s,t)=>s+t.price,0)/recent.length),
+        regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh, watched:isW });
+    } else {
+      // 최근 기간 거래없음 → 표시하되 '거래없음'(과거 최근 거래 참고정보 포함)
+      const st=calcStats(bucket);
+      discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', noTx:true, avg:0, total:0, count:0, growth:null,
+        latest:st.latest.price, latestY:st.latest.year, latestM:st.latest.month, regionDiff:null, isHigh:false, watched:isW });
+    }
   });
-  // 관심단지는 무조건 노출(내 단지 확인용). 해당 기간 거래 없으면 '거래없음' 으로 표기.
+  // 3년내 이 평형 거래가 아예 없는 관심단지도 별도 추가('거래없음')
   apartments.forEach(a=>{
     if(a.lawdCd!==discGu || !a.pyeongs.includes(discPyeong)) return;
     if(discRows.some(r=>r.name===a.aptName && (r.dong||'')===(a.dong||''))) return;
-    const src=bucketByPyeong(byKey[aptGroupKey(a.aptName, a.dong)]||[], discPyeong);
-    if(!src.length){ discRows.push({ name:a.aptName, dong:a.dong||'', watched:true, noTx:true, avg:0, total:0, count:0, growth:null, latest:0, latestY:null, latestM:null, regionDiff:null, isHigh:false }); return; }
-    const st=calcStats(src), av=avgPyeongPrice(src);
-    discRows.push({ name:a.aptName, dong:a.dong||'', latest:st.latest.price, count:src.length,
-      latestY:st.latest.year, latestM:st.latest.month, growth:growthRate(src), avg:av,
-      total:Math.round(src.reduce((s,t)=>s+t.price,0)/src.length),
-      regionDiff: rAvg>0?(av-rAvg)/rAvg*100:null, isHigh:false, watched:true });
+    discRows.push({ name:a.aptName, dong:a.dong||'', watched:true, noTx:true, avg:0, total:0, count:0, growth:null, latest:0, latestY:null, latestM:null, regionDiff:null, isHigh:false });
   });
   renderDiscover();
 }
@@ -1990,7 +1997,9 @@ function renderDiscover(progress){
       rows.sort((a,b)=>b.avg-a.avg);
     }
   }
-  discShown=(refRow?[refRow]:[]).concat(rows.slice(0,40));
+  // 비슷 모드는 상위 40, 일반 발굴은 전부 노출('무조건 다 나와') — 과도 방지 300 캡
+  const LIMIT = discSimilar ? 40 : 300;
+  discShown=(refRow?[refRow]:[]).concat(rows.slice(0,LIMIT));
   // 관심단지는 순위에서 잘렸어도 항상 노출
   if(!discSimilar) discRows.forEach(r=>{ if(r.watched && discShown.indexOf(r)<0) discShown.push(r); });
   const prog = progress ? ` · ${progress}` : '';
@@ -2003,8 +2012,8 @@ function renderDiscover(progress){
   } else {
     const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
       : discSort==='count' ? '거래량순' : '평단가순';
-    const per = discGu==='ALL' ? `최근 ${ALL_MONTHS}개월` : `최근 ${periodLabel(discPeriodM())}`;
-    noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · ${per} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}${prog}`;
+    const per = discGu==='ALL' ? `최근 ${ALL_MONTHS}개월` : `평단가 최근 ${periodLabel(discPeriodM())} · 단지 최근3년 열거`;
+    noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · ${per} · ${rows.length}곳 · ${sortNote}${prog}`;
   }
   if(!discShown.length){
     if(progress){ return; }   // 아직 수집 중이면 '없음' 대신 기존 로딩 유지
