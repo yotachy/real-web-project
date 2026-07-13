@@ -106,6 +106,7 @@
   .sim-axis-btn.on b{color:#fff;}
   .sim-axis-pyeong{display:inline-flex;align-items:center;padding:5px 10px;border-radius:6px;background:rgba(96,165,250,.14);color:var(--blue);font-size:11px;font-weight:800;white-space:nowrap;}
   .disc-pyeong-btn:disabled,.disc-pyeong-btn.locked{opacity:.35;cursor:not-allowed;}
+  .watch-badge{display:inline-block;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent);font-size:9px;font-weight:800;padding:1px 6px;border-radius:99px;vertical-align:middle;}
   .disc-row.is-ref{border:2px solid var(--blue);background:rgba(96,165,250,.12);box-shadow:0 0 0 3px rgba(96,165,250,.18);border-radius:10px;}
   .chart-tabs{display:flex;gap:6px;padding:14px 20px 0;overflow-x:auto;}
   .chart-tab{background:none;border:1.5px solid var(--border);color:var(--muted2);padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Noto Sans KR',sans-serif;white-space:nowrap;transition:all .15s;}
@@ -1835,6 +1836,19 @@ function computeAndRenderDiscover(){
       growth:growthRate(bucket), avg, total:Math.round(bucket.reduce((s,t)=>s+t.price,0)/bucket.length),
       regionDiff: rAvg>0?(avg-rAvg)/rAvg*100:null, isHigh:stats.isHigh });
   });
+  // 관심단지는 거래 3건 미만이어도 목록에 노출(내 단지 확인·비교용). 6개월 내 없으면 관심목록 자체 데이터 사용.
+  apartments.forEach(a=>{
+    if(a.lawdCd!==discGu || !a.pyeongs.includes(discPyeong)) return;
+    if(discRows.some(r=>r.name===a.aptName && (r.dong||'')===(a.dong||''))) return;
+    let src=bucketByPyeong(byKey[aptGroupKey(a.aptName, a.dong)]||[], discPyeong);
+    if(!src.length) src=(transactions[a.id]||{})[discPyeong]||[];
+    if(!src.length) return;
+    const st=calcStats(src), av=avgPyeongPrice(src);
+    discRows.push({ name:a.aptName, dong:a.dong||'', latest:st.latest.price, count:src.length,
+      latestY:st.latest.year, latestM:st.latest.month, growth:growthRate(src), avg:av,
+      total:Math.round(src.reduce((s,t)=>s+t.price,0)/src.length),
+      regionDiff: rAvg>0?(av-rAvg)/rAvg*100:null, isHigh:false, watched:true });
+  });
   renderDiscover();
 }
 
@@ -1870,7 +1884,7 @@ function discRowHtml(r, idx, rank){
   return `<div class="disc-row${isRef?' is-ref':''}">
     <div class="disc-rank">${isRef?'<span class="similar-badge">기준</span>':rank}</div>
     <div class="disc-main">
-      <div class="disc-name">${escapeHtml(r.name)}${r.dong?` <span class="disc-dong">${escapeHtml(r.dong)}</span>`:''} ${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
+      <div class="disc-name">${escapeHtml(r.name)}${r.dong?` <span class="disc-dong">${escapeHtml(r.dong)}</span>`:''} ${r.watched?'<span class="watch-badge">관심</span>':''}${r.isHigh?'<span class="hilo-badge hi">신고가</span>':''}</div>
       <div class="disc-meta">${meta.join(' · ')}</div>
     </div>
     <div class="disc-metric">
@@ -1940,6 +1954,8 @@ function renderDiscover(progress){
     }
   }
   discShown=(refRow?[refRow]:[]).concat(rows.slice(0,40));
+  // 관심단지는 순위에서 잘렸어도 항상 노출
+  if(!discSimilar) discRows.forEach(r=>{ if(r.watched && discShown.indexOf(r)<0) discShown.push(r); });
   const prog = progress ? ` · ${progress}` : '';
   if(discSimilar){
     const axis = simMode==='total' ? `총액 ${formatPrice(discSimilar.total||0)}` : `평단가 ${discSimilar.avg.toLocaleString()}만/평`;
