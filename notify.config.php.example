@@ -1,0 +1,19 @@
+<?php
+/**
+ * 텔레그램 알림 설정 — 이 파일을 real/notify.config.php 로 복사해 채우세요.
+ * (notify.config.php 는 .gitignore·배포제외. 서버에만 존재)
+ *
+ * 설정 순서:
+ *  1) 텔레그램 BotFather 에서 /newbot → 봇 생성 → 토큰 복사(token)
+ *  2) key 는 아무 문자열(URL 시크릿). cron 이 notify.php?key=이값 로 호출
+ *  3) 두 사용자가 봇을 열고 아무 메시지(예: /start) 전송
+ *  4) 브라우저로 https://aptscoop.com/real/notify.php?key=<위 key>&getchats=1 → chat_id 확인
+ *  5) 그 chat_id 들을 chats 배열에 넣기
+ *  6) cron 등록: 매 1~6시간마다 https://aptscoop.com/real/notify.php?key=<위 key> 호출
+ *     (cafe24 크론 / cron-job.org 등 외부 크론 서비스 / 로컬 crontab 아무거나)
+ */
+return [
+    'token' => '123456789:ABCdefGhIJKlmNoPQRstuVWxyz',   // BotFather 토큰
+    'key'   => 'change-this-secret',                     // URL 시크릿
+    'chats' => ['111111111', '222222222'],               // 알림 받을 chat_id 들
+];
