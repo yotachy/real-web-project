@@ -31,7 +31,7 @@ if ($lawd === '' || !$ymds) fail(400, 'LAWD/YMDS 파라미터 없음');
 
 // 집계 결과 캐시 (구 + 기간 + 평형버킷)
 $aggDir  = $cacheDir . '/agg';
-$aggPath = $aggDir . '/' . $lawd . '_' . md5('v3|' . implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
+$aggPath = $aggDir . '/' . $lawd . '_' . md5('v4|' . implode(',', $ymds) . '|' . $pmin . '|' . $pmax) . '.json';
 if (is_file($aggPath) && (time() - filemtime($aggPath)) < AGG_TTL) {
     $d = @file_get_contents($aggPath);
     if ($d !== false) { echo $d; exit; }
@@ -68,7 +68,7 @@ foreach ($ymds as $ymd) {
 }
 $rows = [];
 foreach ($agg as $a) {
-    if ($a['cnt'] < 3) continue;   // 노이즈 방지
+    if ($a['cnt'] < 1) continue;   // 거래 1건이라도 있으면 노출(누락 방지). 상승률은 클라가 3개월↑만 산출
     $mv = [];   // 월별 평균 평단가 (클라이언트가 추세 계산)
     foreach ($a['mo'] as $ym => $sc) $mv[$ym] = (int)round($sc[0] / $sc[1]);
     $rows[] = [

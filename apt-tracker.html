@@ -1596,10 +1596,10 @@ async function fetchAgg(lawd, ymds, pmin, pmax){
 }
 // 집계 결과를 localStorage 에도 캐시(3시간) → 새로고침·세션 넘어 재사용(콜드 최소화)
 var AGG_LS_TTL=3*3600*1000;
-function loadAggLS(key){ try{ const v=JSON.parse(localStorage.getItem('aggc3:'+key)||'null'); if(v && (Date.now()-v.t)<AGG_LS_TTL) return v.r; }catch(e){} return null; }
+function loadAggLS(key){ try{ const v=JSON.parse(localStorage.getItem('aggc4:'+key)||'null'); if(v && (Date.now()-v.t)<AGG_LS_TTL) return v.r; }catch(e){} return null; }
 function saveAggLS(key, rows){
-  try{ localStorage.setItem('aggc3:'+key, JSON.stringify({t:Date.now(), r:rows})); }
-  catch(e){ try{ Object.keys(localStorage).forEach(k=>{ if(k.indexOf('aggc')===0) localStorage.removeItem(k); }); localStorage.setItem('aggc3:'+key, JSON.stringify({t:Date.now(), r:rows})); }catch(e2){} }
+  try{ localStorage.setItem('aggc4:'+key, JSON.stringify({t:Date.now(), r:rows})); }
+  catch(e){ try{ Object.keys(localStorage).forEach(k=>{ if(k.indexOf('aggc')===0) localStorage.removeItem(k); }); localStorage.setItem('aggc4:'+key, JSON.stringify({t:Date.now(), r:rows})); }catch(e2){} }
 }
 // 전체 구를 연속 워커 풀로 집계 → 도착하는 대로 점진적 리스트업(배치 대기 없음 → 빠름)
 const ALL_MONTHS = 5;   // 전체 검색은 최근 5개월 평단가로 제한(속도·upstream 부하)
@@ -1631,7 +1631,11 @@ async function runDiscoverAll(){
       const ck=`${reg.code}_${ymdsKey}_${discPyeong}`;
       let rows=aggCache[ck] || loadAggLS(ck);
       if(rows){ aggCache[ck]=rows; }
-      else { try{ rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); aggCache[ck]=rows; saveAggLS(ck, rows); }catch(e){ rows=[]; } }
+      else {
+        try{ rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); }
+        catch(e){ try{ await new Promise(r=>setTimeout(r,500)); rows=await fetchAgg(reg.code, ymds, def.minM2, def.maxM2); }catch(e2){ rows=null; } }   // 실패(WAF 등) 1회 재시도
+        if(rows){ aggCache[ck]=rows; saveAggLS(ck, rows); } else rows=[];
+      }
       if(gen!==discGen) return;
       rows.forEach(a=>{ merged[reg.code+' '+a.n+' '+(a.u||'')]={
         name:a.n, dong:a.u||'', avg:a.avg, total:a.tp||0, count:a.cnt, latest:a.lp, latestY:a.ly, latestM:a.lm,
@@ -1844,7 +1848,7 @@ function computeAndRenderDiscover(){
   Object.keys(byKey).forEach(k=>{
     const grp=byKey[k];
     const bucket=bucketByPyeong(grp, discPyeong);
-    if(bucket.length<3) return;   // 노이즈 방지: 기간 내 거래 3건 이상만
+    if(bucket.length<1) return;   // 거래 1건이라도 있으면 노출(누락 방지)
     const stats=calcStats(bucket);
     const avg=avgPyeongPrice(bucket);
     discRows.push({ name:grp[0].aptName, dong:grp[0].dong||'', latest:stats.latest.price, count:bucket.length,
