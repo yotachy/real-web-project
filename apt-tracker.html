@@ -1793,11 +1793,12 @@ async function runDiscover(){
   const gen=++discGen;
   resultsEl.innerHTML=`<div class="card-loading"><span class="spinner"></span> 조회중...</div>`;
   document.getElementById('discover-note').textContent='';
-  const ck=`${discGu}_${currentPeriod}`;
+  const dm=discPeriodM();
+  const ck=`${discGu}_${dm}`;
   let regionAll=discCache[ck];
   if(!regionAll){
     try{
-      const ymds=getLastNMonths(currentPeriod);
+      const ymds=getLastNMonths(dm);
       const br=await fetchBatch(discGu, ymds);
       if(gen!==discGen) return;   // 더 최신 요청 있음 → 폐기
       regionAll=Object.values(br).flat().filter(Boolean);
@@ -1813,8 +1814,11 @@ async function runDiscover(){
   computeAndRenderDiscover();
 }
 
+// 단지 검색(단일 구)은 최근 window 로 제한 → 3년 원시조회 과부하 방지(랭킹엔 충분).
+// 상위 기간 버튼이 12개월 이하면 그 값을, 3년/5년이면 12개월로 캡.
+function discPeriodM(){ return Math.min(currentPeriod, 12); }
 function computeAndRenderDiscover(){
-  const regionAll=discCache[`${discGu}_${currentPeriod}`];
+  const regionAll=discCache[`${discGu}_${discPeriodM()}`];
   if(!regionAll) return;
   const byKey={};   // 이름+법정동으로 그룹핑(동명 아파트 분리)
   regionAll.forEach(tx=>{ const k=aptGroupKey(tx.aptName, tx.dong); (byKey[k]=byKey[k]||[]).push(tx); });
@@ -1946,7 +1950,7 @@ function renderDiscover(progress){
   } else {
     const sortNote = discSort==='growth' ? '상승률 = 월별 중앙값 평단가 추세선(회귀, 관측 3개월↑)'
       : discSort==='count' ? '거래량순' : '평단가순';
-    const per = discGu==='ALL' ? `최근 ${ALL_MONTHS}개월` : `최근 ${periodLabel(currentPeriod)}`;
+    const per = discGu==='ALL' ? `최근 ${ALL_MONTHS}개월` : `최근 ${periodLabel(discPeriodM())}`;
     noteEl.textContent=`${regionName} · ${PYEONG_DEFS[discPyeong].label} · ${per} · ${rows.length}개 단지(거래 3건↑) · ${sortNote}${prog}`;
   }
   if(!discShown.length){
